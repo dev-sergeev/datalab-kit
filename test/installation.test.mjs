@@ -34,6 +34,10 @@ test('packed npm installation loads all components and native Pi update refreshe
   assert.deepEqual(settingsAfterInstall.someUserSetting, original.someUserSetting);
 
   await server.addGiga('1.0.1');
+  // Document the remaining host compatibility gap without concealing it behind
+  // a first-start-only test: Pi lost postinstall's standalone source declaration.
+  await run(process.execPath, [cli, 'update', '--extensions'], { cwd, env: { ...env, PI_OFFLINE: '' }, timeout: 100_000 });
+  assert.equal(JSON.parse(await readFile(gigaPath, 'utf8')).version, '1.0.0', 'known Pi 0.85.1 gap before first activation');
 
   process.env.PI_CODING_AGENT_DIR = agentDir;
   process.env.PI_OFFLINE = '1';

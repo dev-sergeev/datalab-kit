@@ -21,7 +21,7 @@ function shellCommands(input: string): string[][] | undefined {
       if (next === undefined || next === '\n') return undefined;
       word += next; started = true; continue;
     }
-    if ('<>$`(){}#'.includes(char) || char === '\u0000') return undefined;
+    if ('<>$`(){}#*?['.includes(char) || char === '\u0000') return undefined;
     if (char === '&') {
       if (input[index + 1] !== '&') return undefined;
       index++; pushCommand(); continue;
@@ -53,7 +53,7 @@ export function isReadOnlyWords(words: readonly string[]): boolean {
   if (name === 'find' && args.some(arg => /^-(?:delete|exec|ok|fprint|fprintf|fls)/.test(arg))) return false;
   if (name === 'fd' && args.some(arg => /^--exec/.test(arg) || /^-[^-]*[xX]/.test(arg))) return false;
   if (name === 'rg' && args.some(arg => /^--pre/.test(arg))) return false;
-  if (name === 'sort' && args.some(arg => /^--o/.test(arg) || /^-[^-]*o/.test(arg))) return false;
+  if (name === 'sort' && args.some(arg => /^--[oc]/.test(arg) || /^-[^-]*o/.test(arg))) return false;
   if (name === 'diff' && args.some(arg => /^--out/.test(arg))) return false;
   return true;
 }

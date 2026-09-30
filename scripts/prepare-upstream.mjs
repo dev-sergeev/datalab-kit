@@ -32,8 +32,39 @@ for (const [folder, version] of [[permission, '33.0.5'], [subagents, '21.7.5']])
 
 await patch(subagents, 'src/settings.ts', [['const DEFAULT_MAX_CONCURRENT = 4;', 'const DEFAULT_MAX_CONCURRENT = 1;']]);
 
+await patch(subagents, 'src/lifecycle/subagent-manager.ts', [
+  ['status: isBackground ? "queued" : "running",', 'status: "queued",'],
+  [`    if (isBackground && !options.bypassQueue) {
+      // Schedule on the limiter — scheduleVia captures the limiter promise
+      // eagerly, so a queued agent is awaitable from spawn; guardedRun guards
+      // against abort-while-queued when the slot frees.
+      record.scheduleVia((thunk) => this.limiter.schedule(thunk));
+      return id;
+    }
+
+    record.start();`, `    // Share the configured limit across background, foreground and RPC spawns.
+    record.scheduleVia((thunk) => this.limiter.schedule(thunk));`],
+  ['await agent.resume(prompt, options.signal);', 'await agent.resume(prompt, options.signal, thunk => this.limiter.schedule(thunk));'],
+  ['Foreground agents bypass the limiter (they block the parent anyway).', 'Foreground and background agents share the limiter.'],
+  ['Foreground agents bypass the concurrency queue.', 'Foreground agents share the concurrency queue.'],
+  ['must\n   * not be queued and must not be announced', 'must\n   * not be announced'],
+]);
+
+await patch(subagents, 'src/lifecycle/subagent.ts', [
+  ['resume(prompt: string, signal?: AbortSignal): Promise<void> {', 'resume(prompt: string, signal?: AbortSignal, schedule: (task: () => Promise<void>) => Promise<void> = task => task()): Promise<void> {'],
+  ['this._promise = this.runResume(subagentSession, prompt, signal);', `this._abortController = new AbortController();
+    this.resetForResume(Date.now());
+    this.listeners.wireSignal(signal, () => this.abort());
+    this._promise = schedule(() => this.isActive() ? this.runResume(subagentSession, prompt, signal) : Promise.resolve());`],
+]);
+
 await patch(permission, 'src/config/policy-loader.ts', [
   ['permission: config.permission,\n    };\n\n    this.globalConfigCache', 'permission: config.permission,\n      ...(issues.length > 0 ? { invalid: true } : {}),\n    };\n\n    this.globalConfigCache'],
+]);
+
+await patch(permission, 'src/config/config-store.ts', [
+  ['private configIssues: readonly string[] = [];', 'private configIssues: readonly string[] = [];\n  private userDialog = false;\n  usesUserDialog(): boolean { return this.userDialog; }'],
+  ['this.config = runtimeConfig;', "this.config = runtimeConfig;\n    this.userDialog = mergeResult.merged.doublePressToConfirm !== undefined || mergeResult.merged.permissionDialogKeys !== undefined;"],
 ]);
 
 await patch(permission, 'src/policy/permission-manager.ts', [
@@ -62,8 +93,10 @@ await patch(permission, 'src/access-intent/bash/command-effects.ts', [
 ], [['isReadOnlyWords', 'read-policy.js']]);
 
 await patch(permission, 'src/authority/permission-prompt-component.ts', [
+  ['export interface PromptPreferences {', 'export interface PromptPreferences {\n  kitUseUserDialog?: boolean;'],
   [`): Promise<PermissionPromptDecision> {
   if (view.mode === "tui") {`, `): Promise<PermissionPromptDecision> {
+  if (view.kitUseUserDialog) return upstreamPermissionDecision(view, title, payload, options);
   const approved = await confirmPermission(view.ui, view.mode, title, payload);
   return attributeToHuman({ approved, state: approved ? 'approved' : 'denied' }, view.mode === 'tui' ? 'dialog' : 'select');
 }
@@ -75,6 +108,7 @@ async function upstreamPermissionDecision(
 ], [['confirmPermission', 'confirmation.js']]);
 
 await patch(permission, 'src/index.ts', [
+  ['getPromptPreferences: () => ({', 'getPromptPreferences: () => ({\n      kitUseUserDialog: configStore.usesUserDialog(),'],
   ['(event, ctx) => gates.handleToolCall(event, ctx),', `(event, ctx) => {
         if (event.toolName === 'bash' && typeof event.input.command === 'string') {
           const normalized = normalizeLocalReadCurl(event.input.command);

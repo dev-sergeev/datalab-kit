@@ -7,13 +7,14 @@ import { gigaChatExtensionPath, hasConfiguredGigaChat, managedAgentDir, register
 export default async function datalabKit(pi: ExtensionAPI): Promise<void> {
   const packageRoot = fileURLToPath(new URL('../', import.meta.url));
   const agentDir = getAgentDir();
+  const configured = await hasConfiguredGigaChat(agentDir);
   // On the first load, provide GigaChat immediately. Later Pi discovers the
   // standalone source itself, so the provider must not be registered twice.
-  if (!await hasConfiguredGigaChat(agentDir)) {
+  if (!configured) {
     const provider = await import(pathToFileURL(gigaChatExtensionPath(packageRoot)).href) as { default: (pi: ExtensionAPI) => void };
-    provider.default(pi);
+    await provider.default(pi);
   }
-  if (managedAgentDir(packageRoot) === resolve(agentDir)) {
+  if (!configured && managedAgentDir(packageRoot) === resolve(agentDir)) {
     pi.on('session_start', async () => {
       // Pi 0.85.1 persists a cached package list after npm postinstall; repair
       // that list at first activation without downloading or updating anything.

@@ -7,7 +7,7 @@
   "engines": { "node": ">=22.19.0" },
   "keywords": ["pi-package", "pi-coding-agent", "gigachat"],
   "publishConfig": { "access": "public" },
-  "files": ["dist", "scripts/postinstall.mjs", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
+  "files": ["dist", "scripts/postinstall.mjs", "docs/adr", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
   "pi": {
     "extensions": [
       "./dist/extension.js",
@@ -23,7 +23,7 @@
   "scripts": {
     "build": "tsc && node scripts/prepare-upstream.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "test": "node --liftoff-only --test --test-concurrency=1 test/*.test.mjs",
     "prepack": "npm run build",
     "postinstall": "node scripts/postinstall.mjs"
   },
@@ -53,6 +53,7 @@
     "@earendil-works/pi-coding-agent": "0.85.1",
     "@earendil-works/pi-tui": "0.85.1",
     "@types/node": "^24.0.0",
+    "jiti": "2.7.0",
     "typescript": "^5.9.3"
   }
 }

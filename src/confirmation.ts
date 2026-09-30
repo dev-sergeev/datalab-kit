@@ -29,7 +29,7 @@ export class ConfirmationDialog {
 
   render(width: number): string[] {
     const usableWidth = Math.max(1, width - 4);
-    const safeText = this.command.replace(/[\u0000-\u0008\u000b-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, '');
+    const safeText = this.command.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '');
     const lines = safeText.split('\n').flatMap(line => wrapTextWithAnsi(line, usableWidth));
     this.scroll = Math.min(this.scroll, Math.max(0, lines.length - 12));
     const choices = ['Отмена', 'Разрешить один раз'];
