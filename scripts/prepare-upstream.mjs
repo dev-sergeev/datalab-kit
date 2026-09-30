@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const permission = resolve(root, 'node_modules/@gotgenes/pi-permission-system');
 const subagents = resolve(root, 'node_modules/@gotgenes/pi-subagents');
+const planMode = resolve(root, 'node_modules/@narumitw/pi-plan-mode');
 
 async function patch(folder, path, edits, imports = []) {
   const file = resolve(folder, path);
@@ -25,10 +26,15 @@ async function patch(folder, path, edits, imports = []) {
   await writeFile(file, `// Datalab Kit adaptation\n${header}\n${text}`);
 }
 
-for (const [folder, version] of [[permission, '33.0.5'], [subagents, '21.7.5']]) {
+for (const [folder, version] of [[permission, '33.0.5'], [subagents, '21.7.5'], [planMode, '0.58.3']]) {
   const pkg = JSON.parse(await readFile(resolve(folder, 'package.json'), 'utf8'));
   if (pkg.version !== version) throw new Error(`Unsupported upstream ${pkg.name}@${pkg.version}`);
 }
+
+await patch(planMode, 'dist/index.ts', [
+  ['  const persistState = () => pi.appendEntry(STATE_ENTRY_TYPE, state);', `  registerPlanModeReader(pi.events, () => state.enabled && workflowMutex.isOwner(workflowOwner) ? currentSession : undefined);
+  const persistState = () => pi.appendEntry(STATE_ENTRY_TYPE, state);`],
+], [['registerPlanModeReader', 'plan-mode.js']]);
 
 await patch(subagents, 'src/settings.ts', [['const DEFAULT_MAX_CONCURRENT = 4;', 'const DEFAULT_MAX_CONCURRENT = 1;']]);
 
@@ -68,8 +74,17 @@ await patch(permission, 'src/config/config-store.ts', [
 ]);
 
 await patch(permission, 'src/policy/permission-manager.ts', [
+  ['export interface PermissionManagerOptions extends PolicyLoaderOptions {', 'export interface PermissionManagerOptions extends PolicyLoaderOptions {\n  kitIsPlanMode?: () => boolean;'],
+  ['private readonly isYoloEnabled: () => boolean;', 'private readonly isYoloEnabled: () => boolean;\n  private readonly kitIsPlanMode: () => boolean;'],
+  ['this.isYoloEnabled = options.isYoloEnabled ?? YOLO_DISABLED;', 'this.isYoloEnabled = options.isYoloEnabled ?? YOLO_DISABLED;\n    this.kitIsPlanMode = options.kitIsPlanMode ?? (() => false);'],
+  ['const cacheKey = agentName ?? "__global__";', 'const planMode = this.kitIsPlanMode();\n    const cacheKey = JSON.stringify([agentName, planMode]);'],
+  ['  getResolvedPolicyPaths(): ResolvedPolicyPaths {', `  kitCanDelegateToPlanMode(agentName?: string): boolean {
+    return this.kitIsPlanMode() && this.resolvePermissions(agentName).failClosedScopes.length === 0;
+  }
+
+  getResolvedPolicyPaths(): ResolvedPolicyPaths {`],
   ['const { mergedPermission, origins } = mergeScopesWithOrigins([', `const { mergedPermission, origins } = mergeScopesWithOrigins([
-      ['builtin', [globalConfig, projectConfig, agentConfig, projectAgentConfig].some(scope => scope.invalid || scope.permission?.['*'] !== undefined) ? {} : { permission: kitPermission }],`],
+      ['builtin', [globalConfig, projectConfig, agentConfig, projectAgentConfig].some(scope => scope.invalid || scope.permission?.['*'] !== undefined) ? {} : { permission: planMode ? { '*': 'allow' } : kitPermission }],`],
   ['if (projectConfig.invalid === true) failClosedScopes.push("project");', 'if (globalConfig.invalid === true) failClosedScopes.push("global");\n    if (projectConfig.invalid === true) failClosedScopes.push("project");'],
   ['// Global is excluded — nothing more permissive is inherited when it fails.', '// Include global: Datalab Kit adds a lower default layer.'],
   ['const { composedRules } = this.resolvePermissions(intent.agentName);', 'const { composedRules, failClosedScopes } = this.resolvePermissions(intent.agentName);'],
@@ -108,6 +123,10 @@ async function upstreamPermissionDecision(
 ], [['confirmPermission', 'confirmation.js']]);
 
 await patch(permission, 'src/index.ts', [
+  ['import type { ExtensionAPI }', 'import type { ExtensionAPI, ExtensionContext }'],
+  ['  const permissionManager = new PermissionManager({', '  let kitSession: ExtensionContext["sessionManager"] | undefined;\n  const permissionManager = new PermissionManager({\n    kitIsPlanMode: () => isPlanModeActive(pi.events, kitSession),'],
+  ['    lifecycle.handleSessionStart(event, ctx),', '    { kitSession = ctx.sessionManager; return lifecycle.handleSessionStart(event, ctx); },'],
+  ['    reporter,\n    isYoloEnabled,\n  );', '    reporter,\n    isYoloEnabled,\n    agentName => permissionManager.kitCanDelegateToPlanMode(agentName),\n  );'],
   ['getPromptPreferences: () => ({', 'getPromptPreferences: () => ({\n      kitUseUserDialog: configStore.usesUserDialog(),'],
   ['(event, ctx) => gates.handleToolCall(event, ctx),', `(event, ctx) => {
         if (event.toolName === 'bash' && typeof event.input.command === 'string') {
@@ -119,7 +138,19 @@ await patch(permission, 'src/index.ts', [
         }
         return gates.handleToolCall(event, ctx);
       },`],
-], [['normalizeLocalReadCurl', 'read-policy.js']]);
+], [['normalizeLocalReadCurl', 'read-policy.js'], ['isPlanModeActive', 'plan-mode.js']]);
+
+// Synthetic bash asks also carry builtin provenance. Delegate those only when
+// Plan mode is active and every user policy loaded successfully.
+await patch(permission, 'src/handlers/gates/runner.ts', [
+  ['    private readonly isYoloEnabled: () => boolean,', '    private readonly isYoloEnabled: () => boolean,\n    private readonly kitCanDelegate: (agentName?: string) => boolean = () => false,'],
+  ['    const check =\n      preResolvedCheckOf(descriptor)', '    let check =\n      preResolvedCheckOf(descriptor)'],
+  ['    // The fields every review-log write for this gate shares,', `    if (check.origin === 'builtin' && check.state === 'ask' && this.kitCanDelegate(agentName ?? undefined)) {
+      check = { ...check, state: 'allow' };
+    }
+
+    // The fields every review-log write for this gate shares,`],
+]);
 
 await patch(permission, 'src/handlers/gates/bash-command.ts', [
   ['  if (isTriviallyEmptyCommand(command)) {', `  const kitWhole = resolveOnBashSurface(command, agentName, resolver);

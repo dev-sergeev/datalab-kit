@@ -11,11 +11,11 @@
   "pi": {
     "extensions": [
       "./dist/extension.js",
+      "./node_modules/@narumitw/pi-plan-mode/dist/index.ts",
       "./node_modules/@gotgenes/pi-permission-system/src/index.ts",
       "./node_modules/@gotgenes/pi-subagents/src/index.ts",
       "./node_modules/@juicesharp/rpiv-ask-user-question/index.ts",
       "./node_modules/pi-powerline-footer/index.ts",
-      "./node_modules/@narumitw/pi-plan-mode/dist/index.ts",
       "./node_modules/@capdiem/pi-todo/index.min.js",
       "./node_modules/pi-rewind/src/index.ts"
     ]

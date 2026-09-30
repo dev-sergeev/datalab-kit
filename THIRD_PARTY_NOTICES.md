@@ -1,6 +1,6 @@
 # Third-party notices
 
-Datalab Kit includes the following upstream components. Their licenses and copyright notices remain in their package directories and apply to those components and their transitive dependencies. Datalab Kit modifies permission-system and subagents during build; see scripts/prepare-upstream.mjs. GigaChat is downloaded separately.
+Datalab Kit includes the following upstream components. Their licenses and copyright notices remain in their package directories and apply to those components and their transitive dependencies. Datalab Kit modifies permission-system, plan-mode and subagents during build; see scripts/prepare-upstream.mjs. GigaChat is downloaded separately.
 
 - @dev-sergeev/pi-gigachat@0.3.3: MIT, git+https://github.com/dev-sergeev/pi-gigachat.git.
 - @juicesharp/rpiv-ask-user-question@2.11.0: MIT, git+https://github.com/juicesharp/rpiv-mono.git.
