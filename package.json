@@ -1,0 +1,58 @@
+{
+  "name": "@dev-sergeev/datalab-kit",
+  "version": "0.1.0",
+  "description": "A ready-to-use collection of Pi coding agent extensions",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22.19.0" },
+  "keywords": ["pi-package", "pi-coding-agent", "gigachat"],
+  "publishConfig": { "access": "public" },
+  "files": ["dist", "scripts/postinstall.mjs", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
+  "pi": {
+    "extensions": [
+      "./dist/extension.js",
+      "./node_modules/@gotgenes/pi-permission-system/src/index.ts",
+      "./node_modules/@gotgenes/pi-subagents/src/index.ts",
+      "./node_modules/@juicesharp/rpiv-ask-user-question/index.ts",
+      "./node_modules/pi-powerline-footer/index.ts",
+      "./node_modules/@narumitw/pi-plan-mode/dist/index.ts",
+      "./node_modules/@capdiem/pi-todo/index.min.js",
+      "./node_modules/pi-rewind/src/index.ts"
+    ]
+  },
+  "scripts": {
+    "build": "tsc && node scripts/prepare-upstream.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "prepack": "npm run build",
+    "postinstall": "node scripts/postinstall.mjs"
+  },
+  "dependencies": {
+    "@dev-sergeev/pi-gigachat": "latest",
+    "@juicesharp/rpiv-ask-user-question": "2.11.0",
+    "pi-powerline-footer": "0.17.2",
+    "@gotgenes/pi-permission-system": "33.0.5",
+    "@narumitw/pi-plan-mode": "0.58.3",
+    "@gotgenes/pi-subagents": "21.7.5",
+    "@capdiem/pi-todo": "0.3.2",
+    "pi-rewind": "0.5.0"
+  },
+  "bundleDependencies": [
+    "@juicesharp/rpiv-ask-user-question", "pi-powerline-footer",
+    "@gotgenes/pi-permission-system", "@narumitw/pi-plan-mode",
+    "@gotgenes/pi-subagents", "@capdiem/pi-todo", "pi-rewind"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  }
+}
