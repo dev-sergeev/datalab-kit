@@ -104,8 +104,8 @@ await patch(permission, 'src/policy/permission-manager.ts', [
 ], [['kitPermission', 'defaults.js'], ['isReadOnlyCommandInput', 'read-policy.js']]);
 
 await patch(permission, 'src/access-intent/bash/command-effects.ts', [
-  ['  if (!isBareCoreWord(headWord)) return UNPROVEN_EFFECT;', "  if (isReadOnlyWords([headWord, ...argWords])) return CORE_READ_EFFECT;\n  if (!isBareCoreWord(headWord)) return UNPROVEN_EFFECT;"],
-], [['isReadOnlyWords', 'read-policy.js']]);
+  ['  if (!isBareCoreWord(headWord)) return UNPROVEN_EFFECT;', "  if (isKnownReadCommand(headWord)) return isReadOnlyWords([headWord, ...argWords]) ? CORE_READ_EFFECT : UNPROVEN_EFFECT;\n  if (!isBareCoreWord(headWord)) return UNPROVEN_EFFECT;"],
+], [['isReadOnlyWords, isKnownReadCommand', 'read-policy.js']]);
 
 await patch(permission, 'src/authority/permission-prompt-component.ts', [
   ['export interface PromptPreferences {', 'export interface PromptPreferences {\n  kitUseUserDialog?: boolean;'],
@@ -125,7 +125,10 @@ async function upstreamPermissionDecision(
 await patch(permission, 'src/index.ts', [
   ['import type { ExtensionAPI }', 'import type { ExtensionAPI, ExtensionContext }'],
   ['  const permissionManager = new PermissionManager({', '  let kitSession: ExtensionContext["sessionManager"] | undefined;\n  const permissionManager = new PermissionManager({\n    kitIsPlanMode: () => isPlanModeActive(pi.events, kitSession),'],
-  ['    lifecycle.handleSessionStart(event, ctx),', '    { kitSession = ctx.sessionManager; return lifecycle.handleSessionStart(event, ctx); },'],
+  ['  const isYoloEnabled = (): boolean => isYoloModeEnabled(configStore.current());', '  const kitYolo = registerYoloControl(pi, () => isYoloModeEnabled(configStore.current()));\n  const isYoloEnabled = (): boolean => kitYolo.isEnabled();'],
+  ['  pi.on("session_start", (event, ctx) =>\n    lifecycle.handleSessionStart(event, ctx),\n  );', '  pi.on("session_start", async (event, ctx) => {\n    kitSession = ctx.sessionManager;\n    await lifecycle.handleSessionStart(event, ctx);\n    kitYolo.refresh(ctx);\n  });'],
+  ['  pi.on("before_agent_start", (event, ctx) => agentPrep.handle(event, ctx));', '  pi.on("before_agent_start", async (event, ctx) => {\n    const result = await agentPrep.handle(event, ctx);\n    kitYolo.refresh(ctx);\n    return result;\n  });'],
+  ['  pi.on("input", (event, ctx) => gates.handleInput(event, ctx));', '  pi.on("input", async (event, ctx) => {\n    const result = await gates.handleInput(event, ctx);\n    kitYolo.refresh(ctx);\n    return result;\n  });'],
   ['    reporter,\n    isYoloEnabled,\n  );', '    reporter,\n    isYoloEnabled,\n    agentName => permissionManager.kitCanDelegateToPlanMode(agentName),\n  );'],
   ['getPromptPreferences: () => ({', 'getPromptPreferences: () => ({\n      kitUseUserDialog: configStore.usesUserDialog(),'],
   ['(event, ctx) => gates.handleToolCall(event, ctx),', `(event, ctx) => {
@@ -138,7 +141,7 @@ await patch(permission, 'src/index.ts', [
         }
         return gates.handleToolCall(event, ctx);
       },`],
-], [['normalizeLocalReadCurl', 'read-policy.js'], ['isPlanModeActive', 'plan-mode.js']]);
+], [['normalizeLocalReadCurl', 'read-policy.js'], ['isPlanModeActive', 'plan-mode.js'], ['registerYoloControl', 'yolo.js']]);
 
 // Synthetic bash asks also carry builtin provenance. Delegate those only when
 // Plan mode is active and every user policy loaded successfully.
@@ -154,6 +157,18 @@ await patch(permission, 'src/handlers/gates/runner.ts', [
 
 await patch(permission, 'src/handlers/gates/bash-command.ts', [
   ['  if (isTriviallyEmptyCommand(command)) {', `  const kitWhole = resolveOnBashSurface(command, agentName, resolver);
-  if (kitWhole.origin === 'builtin' && kitWhole.state === 'ask') return kitWhole;
+  if (kitWhole.state === 'deny') return kitWhole;
   if (isTriviallyEmptyCommand(command)) {`],
-]);
+  [`  const results = commands.map((cmd) =>
+    resolveCommandUnit(cmd, command, agentName, resolver),
+  );`, `  const parsedCommands = inspectionCommands(command);
+  const results = [
+    ...commands.map(cmd => resolveCommandUnit(cmd, command, agentName, resolver)),
+    ...(parsedCommands?.map(text => resolveOnBashSurface(text, agentName, resolver)) ?? []),
+  ];`],
+  [`  return (
+    pickMostRestrictive(results) ??
+    resolveOnBashSurface(command, agentName, resolver)
+  );`, `  const worst = pickMostRestrictive(kitWhole.origin === 'builtin' && parsedCommands !== undefined ? results : [kitWhole, ...results]);
+  return worst ?? kitWhole;`],
+], [['inspectionCommands', 'read-policy.js']]);

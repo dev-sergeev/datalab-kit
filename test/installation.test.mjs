@@ -57,5 +57,5 @@ test('packed npm installation loads all components and native Pi update refreshe
   }
   await run(process.execPath, [cli, 'update', '--extensions'], { cwd, env: { ...env, PI_OFFLINE: '' }, timeout: 100_000 });
   assert.equal(JSON.parse(await readFile(gigaPath, 'utf8')).version, '1.0.1');
-  assert.equal(JSON.parse(await readFile(join(agentDir, 'npm/node_modules/@dev-sergeev/datalab-kit/package.json'), 'utf8')).version, '0.1.0');
+  assert.equal(JSON.parse(await readFile(join(agentDir, 'npm/node_modules/@dev-sergeev/datalab-kit/package.json'), 'utf8')).version, manifest.version);
 });

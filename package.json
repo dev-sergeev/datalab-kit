@@ -1,13 +1,13 @@
 {
   "name": "@dev-sergeev/datalab-kit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A ready-to-use collection of Pi coding agent extensions",
   "type": "module",
   "license": "MIT",
   "engines": { "node": ">=22.19.0" },
   "keywords": ["pi-package", "pi-coding-agent", "gigachat"],
   "publishConfig": { "access": "public" },
-  "files": ["dist", "scripts/postinstall.mjs", "docs/adr", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
+  "files": ["dist", "scripts/postinstall.mjs", "docs/adr", "README.md", "CHANGELOG.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
   "pi": {
     "extensions": [
       "./dist/extension.js",

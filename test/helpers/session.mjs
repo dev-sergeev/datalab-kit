@@ -4,7 +4,7 @@ import { resolve, join } from 'node:path';
 import { createAgentSession, SettingsManager, SessionManager, DefaultResourceLoader } from '@earendil-works/pi-coding-agent';
 import { agentSandbox } from './agent-sandbox.mjs';
 
-export async function start(t, config, answer = 'Отмена', { planMode = false, planSettings, sessionManager } = {}) {
+export async function start(t, config, answer = 'Отмена', { planMode = false, todo = false, planSettings, sessionManager } = {}) {
   const { cwd, agentDir, trackSession } = await agentSandbox(t);
   if (config !== undefined) {
     const folder = join(agentDir, 'extensions', 'pi-permission-system');
@@ -17,6 +17,7 @@ export async function start(t, config, answer = 'Отмена', { planMode = fal
     additionalExtensionPaths: [
       ...(planMode ? [resolve('node_modules/@narumitw/pi-plan-mode/dist/index.ts')] : []),
       resolve('node_modules/@gotgenes/pi-permission-system/src/index.ts'),
+      ...(todo ? [resolve('node_modules/@capdiem/pi-todo/index.min.js')] : []),
     ],
   });
   await loader.reload();
@@ -26,7 +27,13 @@ export async function start(t, config, answer = 'Отмена', { planMode = fal
   trackSession(session);
   assert.deepEqual(extensionsResult.errors, []);
   const prompts = [];
-  const ui = { ...session.extensionRunner.getUIContext(), select: async (...args) => { prompts.push(args); return answer; } };
+  const statuses = new Map();
+  const notices = [];
+  const ui = { ...session.extensionRunner.getUIContext(),
+    select: async (...args) => { prompts.push(args); return answer; },
+    setStatus: (key, value) => { statuses.set(key, value); },
+    notify: (...args) => { notices.push(args); },
+  };
   await session.bindExtensions({ uiContext: ui, mode: 'rpc' });
-  return { runner: session.extensionRunner, session, prompts, cwd, agentDir };
+  return { runner: session.extensionRunner, session, prompts, statuses, notices, cwd, agentDir };
 }
