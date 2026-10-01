@@ -4,7 +4,7 @@ import { resolve, join } from 'node:path';
 import { createAgentSession, SettingsManager, SessionManager, DefaultResourceLoader } from '@earendil-works/pi-coding-agent';
 import { agentSandbox } from './agent-sandbox.mjs';
 
-export async function start(t, config, answer = 'Отмена', { planMode = false, todo = false, planSettings, sessionManager } = {}) {
+export async function start(t, config, answer = 'No', { planMode = false, todo = false, planSettings, sessionManager } = {}) {
   const { cwd, agentDir, trackSession } = await agentSandbox(t);
   if (config !== undefined) {
     const folder = join(agentDir, 'extensions', 'pi-permission-system');
@@ -30,7 +30,7 @@ export async function start(t, config, answer = 'Отмена', { planMode = fal
   const statuses = new Map();
   const notices = [];
   const ui = { ...session.extensionRunner.getUIContext(),
-    select: async (...args) => { prompts.push(args); return answer; },
+    select: async (...args) => { prompts.push(args); return typeof answer === 'function' ? answer(...args) : answer; },
     setStatus: (key, value) => { statuses.set(key, value); },
     notify: (...args) => { notices.push(args); },
   };

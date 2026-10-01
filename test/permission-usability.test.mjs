@@ -42,10 +42,6 @@ const changes = [
 function call(runner, toolName, input) {
   return runner.emitToolCall({ type: 'tool_call', toolName, toolCallId: JSON.stringify(input), input });
 }
-async function yolo(runner, value) {
-  await runner.getCommand('yolo').handler(value, runner.createCommandContext());
-}
-
 test('inspection matrix crosses real permission gates without false prompts', async t => {
   const { runner, prompts } = await start(t);
   for (const command of inspections) {
@@ -113,9 +109,6 @@ test('expanded globs respect user path denies, cd bases and symlink aliases', as
   }
   assert.equal(prompts.length, 0);
   assert.notEqual((await call(runner, 'bash', { command: 'cat data/pub*.ts | head' }))?.block, true);
-  await yolo(runner, 'on');
-  assert.equal((await call(runner, 'bash', { command: 'cat data/*.ts | head' }))?.block, true);
-  assert.equal(prompts.length, 0);
 });
 
 test('explicit user grants compose with read-only preambles without builtin false prompts', async t => {
@@ -125,7 +118,7 @@ test('explicit user grants compose with read-only preambles without builtin fals
 });
 
 test('real todo creation and updates need no kit approvals; explicit user rules still win', async t => {
-  const { runner, session, prompts } = await start(t, undefined, 'Отмена', { todo: true });
+  const { runner, session, prompts } = await start(t, undefined, 'No', { todo: true });
   const tool = runner.getToolDefinition('todo');
   const tasks = [{ key: 'inspect', subject: 'Проверить поведение', status: 'in_progress' }];
   assert.notEqual((await call(runner, 'todo', { tasks }))?.block, true);
@@ -138,86 +131,43 @@ test('real todo creation and updates need no kit approvals; explicit user rules 
 });
 
 for (const policy of ['ask', 'deny']) test(`explicit todo ${policy} overrides kit allow`, async t => {
-  const { runner, prompts } = await start(t, { permission: { todo: policy } }, 'Отмена', { todo: true });
+  const { runner, prompts } = await start(t, { permission: { todo: policy } }, 'No', { todo: true });
   assert.equal((await call(runner, 'todo', { tasks: [] }))?.block, true);
   assert.equal(prompts.length, policy === 'ask' ? 1 : 0);
 });
 
-test('session YOLO approves asks and synthetic gates, preserves denies, and off restores prompts', async t => {
-  const { runner, prompts, statuses, notices, agentDir } = await start(t, { permission: { bash: { 'git push': 'deny' } } });
+test('stock YOLO approves asks and preserves denies without bespoke commands or config rewrites', async t => {
+  const { runner, prompts, statuses, agentDir } = await start(t, { yoloMode: true, permission: { bash: { 'git push': 'deny' } } });
   const path = join(agentDir, 'extensions/pi-permission-system/config.json');
   const original = await readFile(path, 'utf8');
-  assert.ok(runner.getCommand('yolo'));
-  await yolo(runner, 'status');
-  assert.match(notices.at(-1)[0], /YOLO off/);
-  await yolo(runner, 'on');
-  assert.equal(statuses.get('pi-permission-system'), 'yolo');
-  await runner.emitInput('continue', undefined, 'interactive');
-  assert.equal(statuses.get('pi-permission-system'), 'yolo');
-  await runner.emitBeforeAgentStart('continue', undefined, 'system', {});
+  assert.equal(runner.getCommand('yolo'), undefined);
+  assert.ok(runner.getCommand('permission-system'));
   assert.equal(statuses.get('pi-permission-system'), 'yolo');
   for (const command of ['rm file', 'npm install', 'bash -c "rm file"', 'cat $(rm file)']) {
     assert.notEqual((await call(runner, 'bash', { command }))?.block, true, command);
   }
   assert.equal((await call(runner, 'bash', { command: 'cat a && git push' }))?.block, true);
   assert.equal(prompts.length, 0);
-  assert.equal(await readFile(path, 'utf8'), original);
-  await yolo(runner, 'off');
-  assert.equal(statuses.get('pi-permission-system'), undefined);
-  await runner.emitInput('continue', undefined, 'interactive');
-  assert.equal(statuses.get('pi-permission-system'), undefined);
-  await runner.emitBeforeAgentStart('continue', undefined, 'system', {});
-  assert.equal(statuses.get('pi-permission-system'), undefined);
-  assert.equal((await call(runner, 'bash', { command: 'rm file' }))?.block, true);
-  assert.ok(prompts.length > 0);
-  assert.equal(await readFile(path, 'utf8'), original);
-  await yolo(runner, 'unknown');
-  assert.match(notices.at(-1)[0], /Usage/);
-});
-
-test('session off overrides persistent YOLO without rewriting it, and new session resets override', async t => {
-  const { runner, statuses, prompts, agentDir } = await start(t, { yoloMode: true });
-  assert.equal(statuses.get('pi-permission-system'), 'yolo');
-  await yolo(runner, 'off');
-  assert.equal((await call(runner, 'bash', { command: 'rm file' }))?.block, true);
-  assert.equal(statuses.get('pi-permission-system'), undefined);
-  const config = JSON.parse(await readFile(join(agentDir, 'extensions/pi-permission-system/config.json'), 'utf8'));
-  assert.equal(config.yoloMode, true);
   await runner.emit({ type: 'session_start', reason: 'new' });
-  const before = prompts.length;
   assert.notEqual((await call(runner, 'bash', { command: 'rm file' }))?.block, true);
-  assert.equal(prompts.length, before);
-  assert.equal(statuses.get('pi-permission-system'), 'yolo');
+  assert.equal(prompts.length, 0);
+  assert.equal(await readFile(path, 'utf8'), original);
 });
 
-test('YOLO remains off in a new session by default and cannot loosen Plan mode', async t => {
-  const { runner, prompts, statuses } = await start(t, undefined, 'Отмена', { planMode: true });
-  await yolo(runner, 'on');
+test('stock YOLO cannot loosen Plan mode', async t => {
+  const { runner, prompts } = await start(t, { yoloMode: true }, 'No', { planMode: true });
   await runner.getCommand('plan').handler('start', runner.createCommandContext());
   assert.equal((await call(runner, 'bash', { command: 'rm file' }))?.block, true);
   assert.equal(prompts.length, 0);
   await runner.getCommand('plan').handler('off', runner.createCommandContext());
   assert.notEqual((await call(runner, 'bash', { command: 'rm file' }))?.block, true);
-  await runner.emit({ type: 'session_start', reason: 'new' });
-  assert.equal(statuses.get('pi-permission-system'), undefined);
-  assert.equal((await call(runner, 'bash', { command: 'rm file' }))?.block, true);
-  assert.ok(prompts.length > 0);
-});
-
-test('malformed policy still asks in normal mode; explicit YOLO opts into approving those asks', async t => {
-  const { runner, prompts } = await start(t, '{bad json');
-  assert.equal((await call(runner, 'bash', { command: 'grep foo *.ts | head' }))?.block, true);
-  await yolo(runner, 'on');
-  const before = prompts.length;
-  assert.notEqual((await call(runner, 'bash', { command: 'rm file' }))?.block, true);
-  assert.equal(prompts.length, before);
+  assert.equal(prompts.length, 0);
 });
 
 test('YOLO preserves user path and tool denies while approving explicit asks', async t => {
-  const { runner, prompts, cwd } = await start(t, { permission: {
+  const { runner, prompts, cwd } = await start(t, { yoloMode: true, permission: {
     bash: 'ask', todo: 'deny', path_write: { '*secret*': 'deny' },
-  } }, 'Отмена', { todo: true });
-  await yolo(runner, 'on');
+  } }, 'No', { todo: true });
   assert.notEqual((await call(runner, 'bash', { command: 'npm install' }))?.block, true);
   assert.equal((await call(runner, 'write', { path: `${cwd}/secret.txt`, content: 'x' }))?.block, true);
   assert.equal((await call(runner, 'todo', { tasks: [] }))?.block, true);

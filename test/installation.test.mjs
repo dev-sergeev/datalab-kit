@@ -15,6 +15,7 @@ test('packed npm installation loads all components and native Pi update refreshe
   const { stdout } = await run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', root], { maxBuffer: 16 * 1024 * 1024 });
   const packed = packInfo(stdout);
   assert.equal(packed.files.some(file => file.path.startsWith('node_modules/@earendil-works/')), false, 'must not bundle host APIs');
+  assert.equal(packed.files.some(file => /^dist\/(confirmation|yolo)\./.test(file.path)), false, 'must not ship removed dialog or YOLO modules');
   await server.add(manifest, join(root, packed.filename));
   const agentDir = join(root, 'agent');
   const cwd = join(root, 'project');
@@ -47,6 +48,8 @@ test('packed npm installation loads all components and native Pi update refreshe
     assert.deepEqual(extensionsResult.errors, []);
     assert.equal(extensionsResult.extensions.length, 8);
     assert.ok(session.extensionRunner.getCommand('fixture-giga'));
+    assert.ok(session.extensionRunner.getCommand('permission-system'));
+    assert.equal(session.extensionRunner.getCommand('yolo'), undefined);
     await session.bindExtensions({});
     const configured = JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8'));
     assert.ok(configured.packages.includes('npm:@dev-sergeev/pi-gigachat'));

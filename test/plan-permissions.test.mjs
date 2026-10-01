@@ -14,7 +14,7 @@ function call(runner, toolName, input) {
 }
 
 test('Plan owns command admission without kit prompts; leaving restores kit defaults', async t => {
-  const { runner, prompts } = await start(t, undefined, 'Отмена', { planMode: true });
+  const { runner, prompts } = await start(t, undefined, 'No', { planMode: true });
   assert.equal((await call(runner, 'bash', { command: 'npm test' }))?.block, true);
   const before = prompts.length;
   await plan(runner, 'start');
@@ -44,7 +44,7 @@ test('Plan preserves user asks and denies, including nested command and path rul
     bash: { 'npm test': 'ask', 'git status': 'deny' },
     read: { '*secret*': 'deny' },
     path_read: { '*private*': 'ask' },
-  } }, 'Отмена', { planMode: true });
+  } }, 'No', { planMode: true });
   await plan(runner, 'start');
   assert.equal((await call(runner, 'bash', { command: 'npm test' }))?.block, true);
   assert.equal(prompts.length, 1);
@@ -59,7 +59,7 @@ test('Plan preserves user asks and denies, including nested command and path rul
 });
 
 test('user wildcard still asks in Plan mode', async t => {
-  const { runner, prompts } = await start(t, { permission: { '*': 'ask' } }, 'Отмена', { planMode: true });
+  const { runner, prompts } = await start(t, { permission: { '*': 'ask' } }, 'No', { planMode: true });
   await plan(runner, 'start');
   assert.equal((await call(runner, 'bash', { command: 'npm test' }))?.block, true);
   assert.equal((await call(runner, 'plan_mode_complete', {}))?.block, true);
@@ -67,7 +67,7 @@ test('user wildcard still asks in Plan mode', async t => {
 });
 
 test('invalid user policy fails closed in Plan mode', async t => {
-  const { runner, prompts } = await start(t, '{bad json', 'Отмена', { planMode: true });
+  const { runner, prompts } = await start(t, '{bad json', 'No', { planMode: true });
   await plan(runner, 'start');
   assert.equal((await call(runner, 'bash', { command: 'npm test' }))?.block, true);
   assert.ok(prompts.length > 0);
@@ -76,7 +76,7 @@ test('invalid user policy fails closed in Plan mode', async t => {
 test('restored Plan state delegates defaults and restores approvals on exit', async t => {
   const sessionManager = SessionManager.inMemory('/tmp');
   sessionManager.appendCustomEntry('plan-mode-state', { enabled: true, awaitingAction: false });
-  const { runner, prompts } = await start(t, undefined, 'Отмена', { planMode: true, sessionManager });
+  const { runner, prompts } = await start(t, undefined, 'No', { planMode: true, sessionManager });
   assert.notEqual((await call(runner, 'bash', { command: 'npm test' }))?.block, true);
   assert.equal(prompts.length, 0);
   await plan(runner, 'off');
@@ -86,7 +86,7 @@ test('restored Plan state delegates defaults and restores approvals on exit', as
 
 test('branch changes restore the corresponding permission mode without stale cache', async t => {
   const sessionManager = SessionManager.inMemory('/tmp');
-  const { runner, prompts } = await start(t, undefined, 'Отмена', { planMode: true, sessionManager });
+  const { runner, prompts } = await start(t, undefined, 'No', { planMode: true, sessionManager });
   await plan(runner, 'start');
   const planningLeaf = sessionManager.getLeafId();
   await plan(runner, 'off');
@@ -103,7 +103,7 @@ test('branch changes restore the corresponding permission mode without stale cac
 test('saved Plan state cannot bypass permissions when Plan extension is absent', async t => {
   const sessionManager = SessionManager.inMemory('/tmp');
   sessionManager.appendCustomEntry('plan-mode-state', { enabled: true, awaitingAction: false });
-  const { runner, prompts } = await start(t, undefined, 'Отмена', { sessionManager });
+  const { runner, prompts } = await start(t, undefined, 'No', { sessionManager });
   assert.equal((await call(runner, 'bash', { command: 'npm test' }))?.block, true);
   assert.ok(prompts.length > 0);
 });
@@ -111,7 +111,7 @@ test('saved Plan state cannot bypass permissions when Plan extension is absent',
 test('failed Plan restoration keeps ordinary approvals despite saved enabled state', async t => {
   const sessionManager = SessionManager.inMemory('/tmp');
   sessionManager.appendCustomEntry('plan-mode-state', { enabled: true, awaitingAction: false });
-  const { runner, session, prompts } = await start(t, undefined, 'Отмена', { planMode: true, sessionManager });
+  const { runner, session, prompts } = await start(t, undefined, 'No', { planMode: true, sessionManager });
   session.setActiveToolsByName(['read', 'bash']);
   await runner.emit({ type: 'session_start', reason: 'resume' });
   assert.equal((await call(runner, 'bash', { command: 'npm test' }))?.block, true);
@@ -119,7 +119,7 @@ test('failed Plan restoration keeps ordinary approvals despite saved enabled sta
 });
 
 test('Plan-approved wrappers delegate synthetic builtin asks without changing normal-mode gates', async t => {
-  const { runner, prompts } = await start(t, undefined, 'Отмена', {
+  const { runner, prompts } = await start(t, undefined, 'No', {
     planMode: true, planSettings: { safeSubcommands: { env: ['npm'] } },
   });
   await plan(runner, 'start');

@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -29,6 +29,19 @@ async function patch(folder, path, edits, imports = []) {
 for (const [folder, version] of [[permission, '33.0.5'], [subagents, '21.7.5'], [planMode, '0.58.3']]) {
   const pkg = JSON.parse(await readFile(resolve(folder, 'package.json'), 'utf8'));
   if (pkg.version !== version) throw new Error(`Unsupported upstream ${pkg.name}@${pkg.version}`);
+}
+
+// Restore former UI adaptations when rebuilding an existing 0.1.1 checkout.
+// Clean obsolete outputs too: tsc does not remove files for deleted sources.
+for (const path of ['src/config/config-store.ts', 'src/authority/permission-prompt-component.ts']) {
+  const file = resolve(permission, path);
+  if ((await readFile(file, 'utf8')).includes('// Datalab Kit adaptation')) {
+    const backup = resolve(root, 'node_modules/.cache/datalab-kit', relative(root, file));
+    await writeFile(file, await readFile(backup, 'utf8'));
+  }
+}
+for (const name of ['confirmation', 'yolo']) {
+  for (const extension of ['js', 'd.ts']) await rm(resolve(root, 'dist', `${name}.${extension}`), { force: true });
 }
 
 await patch(planMode, 'dist/index.ts', [
@@ -66,11 +79,6 @@ await patch(subagents, 'src/lifecycle/subagent.ts', [
 
 await patch(permission, 'src/config/policy-loader.ts', [
   ['permission: config.permission,\n    };\n\n    this.globalConfigCache', 'permission: config.permission,\n      ...(issues.length > 0 ? { invalid: true } : {}),\n    };\n\n    this.globalConfigCache'],
-]);
-
-await patch(permission, 'src/config/config-store.ts', [
-  ['private configIssues: readonly string[] = [];', 'private configIssues: readonly string[] = [];\n  private userDialog = false;\n  usesUserDialog(): boolean { return this.userDialog; }'],
-  ['this.config = runtimeConfig;', "this.config = runtimeConfig;\n    this.userDialog = mergeResult.merged.doublePressToConfirm !== undefined || mergeResult.merged.permissionDialogKeys !== undefined;"],
 ]);
 
 await patch(permission, 'src/policy/permission-manager.ts', [
@@ -134,30 +142,11 @@ await patch(permission, 'src/access-intent/bash/bash-path-resolver.ts', [
     };`],
 ], [['shellGlobTokens, expandShellGlob, isReadOnlyCommand', 'read-policy.js']]);
 
-await patch(permission, 'src/authority/permission-prompt-component.ts', [
-  ['export interface PromptPreferences {', 'export interface PromptPreferences {\n  kitUseUserDialog?: boolean;'],
-  [`): Promise<PermissionPromptDecision> {
-  if (view.mode === "tui") {`, `): Promise<PermissionPromptDecision> {
-  if (view.kitUseUserDialog) return upstreamPermissionDecision(view, title, payload, options);
-  const approved = await confirmPermission(view.ui, view.mode, title, payload);
-  return attributeToHuman({ approved, state: approved ? 'approved' : 'denied' }, view.mode === 'tui' ? 'dialog' : 'select');
-}
-
-async function upstreamPermissionDecision(
-  view: PermissionPromptView, title: string, payload: PromptPayload, options?: RequestPermissionOptions,
-): Promise<PermissionPromptDecision> {
-  if (view.mode === "tui") {`],
-], [['confirmPermission', 'confirmation.js']]);
-
 await patch(permission, 'src/index.ts', [
   ['import type { ExtensionAPI }', 'import type { ExtensionAPI, ExtensionContext }'],
   ['  const permissionManager = new PermissionManager({', '  let kitSession: ExtensionContext["sessionManager"] | undefined;\n  const permissionManager = new PermissionManager({\n    kitIsPlanMode: () => isPlanModeActive(pi.events, kitSession),'],
-  ['  const isYoloEnabled = (): boolean => isYoloModeEnabled(configStore.current());', '  const kitYolo = registerYoloControl(pi, () => isYoloModeEnabled(configStore.current()));\n  const isYoloEnabled = (): boolean => kitYolo.isEnabled();'],
-  ['  pi.on("session_start", (event, ctx) =>\n    lifecycle.handleSessionStart(event, ctx),\n  );', '  pi.on("session_start", async (event, ctx) => {\n    kitSession = ctx.sessionManager;\n    await lifecycle.handleSessionStart(event, ctx);\n    kitYolo.refresh(ctx);\n  });'],
-  ['  pi.on("before_agent_start", (event, ctx) => agentPrep.handle(event, ctx));', '  pi.on("before_agent_start", async (event, ctx) => {\n    const result = await agentPrep.handle(event, ctx);\n    kitYolo.refresh(ctx);\n    return result;\n  });'],
-  ['  pi.on("input", (event, ctx) => gates.handleInput(event, ctx));', '  pi.on("input", async (event, ctx) => {\n    const result = await gates.handleInput(event, ctx);\n    kitYolo.refresh(ctx);\n    return result;\n  });'],
+  ['  pi.on("session_start", (event, ctx) =>\n    lifecycle.handleSessionStart(event, ctx),\n  );', '  pi.on("session_start", async (event, ctx) => {\n    kitSession = ctx.sessionManager;\n    await lifecycle.handleSessionStart(event, ctx);\n  });'],
   ['    reporter,\n    isYoloEnabled,\n  );', '    reporter,\n    isYoloEnabled,\n    agentName => permissionManager.kitCanDelegateToPlanMode(agentName),\n  );'],
-  ['getPromptPreferences: () => ({', 'getPromptPreferences: () => ({\n      kitUseUserDialog: configStore.usesUserDialog(),'],
   ['(event, ctx) => gates.handleToolCall(event, ctx),', `(event, ctx) => {
         if (event.toolName === 'bash' && typeof event.input.command === 'string') {
           const normalized = normalizeLocalReadCurl(event.input.command);
@@ -168,7 +157,7 @@ await patch(permission, 'src/index.ts', [
         }
         return gates.handleToolCall(event, ctx);
       },`],
-], [['normalizeLocalReadCurl', 'read-policy.js'], ['isPlanModeActive', 'plan-mode.js'], ['registerYoloControl', 'yolo.js']]);
+], [['normalizeLocalReadCurl', 'read-policy.js'], ['isPlanModeActive', 'plan-mode.js']]);
 
 // Synthetic bash asks also carry builtin provenance. Delegate those only when
 // Plan mode is active and every user policy loaded successfully.
