@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFile, writeFile, symlink } from 'node:fs/promises';
+import { readFile, writeFile, symlink, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { start } from './helpers/session.mjs';
 
@@ -99,6 +99,22 @@ test('existing bare files and symlink aliases retain their user path restriction
   await symlink(join(cwd, 'secret.txt'), join(cwd, 'alias.txt'));
   assert.notEqual((await call(runner, 'bash', { command: 'cat ordinary.txt | head' }))?.block, true);
   assert.equal((await call(runner, 'bash', { command: 'cat alias.txt | head' }))?.block, true);
+  assert.equal(prompts.length, 0);
+});
+
+test('expanded globs respect user path denies, cd bases and symlink aliases', async t => {
+  const { runner, prompts, cwd } = await start(t, { permission: { path_read: { '*secret*': 'deny' } } });
+  await mkdir(join(cwd, 'data'));
+  await writeFile(join(cwd, 'data/public.ts'), 'public');
+  await writeFile(join(cwd, 'data/secret.ts'), 'secret');
+  await symlink(join(cwd, 'data/secret.ts'), join(cwd, 'alias.ts'));
+  for (const command of ['grep foo data/*.ts | head', 'cd data && grep foo *.ts | head', 'cat *.ts | head', 'grep data/*.ts ordinary.txt']) {
+    assert.equal((await call(runner, 'bash', { command }))?.block, true, command);
+  }
+  assert.equal(prompts.length, 0);
+  assert.notEqual((await call(runner, 'bash', { command: 'cat data/pub*.ts | head' }))?.block, true);
+  await yolo(runner, 'on');
+  assert.equal((await call(runner, 'bash', { command: 'cat data/*.ts | head' }))?.block, true);
   assert.equal(prompts.length, 0);
 });
 

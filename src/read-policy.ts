@@ -1,3 +1,6 @@
+import { globSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 type ShellWord = { text: string; glob: boolean };
 
 /** Parse inspection syntax without executing expansions or subprocesses. */
@@ -152,6 +155,15 @@ export function inspectionCommands(command: string): string[] | undefined {
   // asking the policy about the actual command, independently of upstream AST.
   return commands.map(words => words.map(word => word.glob || /^[\w./:@%+=,-]+$/.test(word.text)
     ? word.text : `'${word.text.replaceAll("'", "'\\''")}'`).join(' '));
+}
+
+/** Expand accepted shell globs for path checks without executing the command. */
+export function shellGlobTokens(command: string): string[] {
+  return (shellCommands(command) ?? []).flatMap(words => words.filter(word => word.glob).map(word => word.text));
+}
+
+export function expandShellGlob(pattern: string, cwd: string): string[] {
+  return globSync(pattern, { cwd }).map(path => resolve(cwd, path));
 }
 
 export function isReadOnlyCommandInput(input: unknown): boolean {

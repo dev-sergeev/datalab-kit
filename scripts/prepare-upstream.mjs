@@ -107,6 +107,33 @@ await patch(permission, 'src/access-intent/bash/command-effects.ts', [
   ['  if (!isBareCoreWord(headWord)) return UNPROVEN_EFFECT;', "  if (isKnownReadCommand(headWord)) return isReadOnlyWords([headWord, ...argWords]) ? CORE_READ_EFFECT : UNPROVEN_EFFECT;\n  if (!isBareCoreWord(headWord)) return UNPROVEN_EFFECT;"],
 ], [['isReadOnlyWords, isKnownReadCommand', 'read-policy.js']]);
 
+await patch(permission, 'src/access-intent/bash/bash-path-resolver.ts', [
+  [`        tagTokens(collectCommandTokens(node), base, out);
+        return this.foldCd(node, base);`, `        const tokens = collectCommandTokens(node);
+        const present = new Set(tokens.map(token => token.token));
+        const globEffect = isReadOnlyCommand(node.text) ? { effect: 'read' as const, source: 'core' as const } : UNPROVEN_EFFECT;
+        tagTokens([
+          ...tokens,
+          ...shellGlobTokens(node.text).filter(token => !present.has(token)).map(token => ({ token, effect: globEffect })),
+        ], base, out);
+        return this.foldCd(node, base);`],
+  [`    return {
+      externalAccesses: this.withWorkdirExternal(
+        this.projectExternalPaths(candidates),
+      ),
+      ruleCandidates: this.projectRuleCandidates(candidates),
+    };`, `    const globTokens = new Set(shellGlobTokens(rootNode.text));
+    const expandedCandidates = candidates.flatMap(candidate => {
+      if (candidate.base.kind !== 'known' || !globTokens.has(candidate.token)) return [candidate];
+      const cwd = this.normalizer.resolveBase(candidate.base.offset);
+      return [candidate, ...expandShellGlob(candidate.token, cwd).map(token => ({ ...candidate, token }))];
+    });
+    return {
+      externalAccesses: this.withWorkdirExternal(this.projectExternalPaths(expandedCandidates)),
+      ruleCandidates: this.projectRuleCandidates(expandedCandidates),
+    };`],
+], [['shellGlobTokens, expandShellGlob, isReadOnlyCommand', 'read-policy.js']]);
+
 await patch(permission, 'src/authority/permission-prompt-component.ts', [
   ['export interface PromptPreferences {', 'export interface PromptPreferences {\n  kitUseUserDialog?: boolean;'],
   [`): Promise<PermissionPromptDecision> {
