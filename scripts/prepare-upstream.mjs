@@ -6,6 +6,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const permission = resolve(root, 'node_modules/@gotgenes/pi-permission-system');
 const subagents = resolve(root, 'node_modules/@gotgenes/pi-subagents');
 const planMode = resolve(root, 'node_modules/@narumitw/pi-plan-mode');
+const recap = resolve(root, 'node_modules/@tifan/pi-recap');
 
 async function patch(folder, path, edits, imports = []) {
   const file = resolve(folder, path);
@@ -26,10 +27,16 @@ async function patch(folder, path, edits, imports = []) {
   await writeFile(file, `// Datalab Kit adaptation\n${header}\n${text}`);
 }
 
-for (const [folder, version] of [[permission, '33.0.5'], [subagents, '21.7.5'], [planMode, '0.58.3']]) {
+for (const [folder, version] of [[permission, '33.0.5'], [subagents, '21.7.5'], [planMode, '0.58.3'], [recap, '0.4.7']]) {
   const pkg = JSON.parse(await readFile(resolve(folder, 'package.json'), 'utf8'));
   if (pkg.version !== version) throw new Error(`Unsupported upstream ${pkg.name}@${pkg.version}`);
 }
+
+// Keep the same default after /recap config -> Use default, which removes the
+// saved config. Changing only the default also updates the model picker label.
+await patch(recap, 'src/models.ts', [
+  ['  provider: "openai-codex",\n  id: "gpt-5.6-luna",', '  provider: "gigachat",\n  id: "Qwen3.5-397b",'],
+]);
 
 // Restore former UI adaptations when rebuilding an existing 0.1.1 checkout.
 // Clean obsolete outputs too: tsc does not remove files for deleted sources.

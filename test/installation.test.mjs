@@ -46,7 +46,7 @@ test('packed npm installation loads all components and native Pi update refreshe
     sessionManager: SessionManager.inMemory(cwd) });
   try {
     assert.deepEqual(extensionsResult.errors, []);
-    assert.equal(extensionsResult.extensions.length, 8);
+    assert.equal(extensionsResult.extensions.length, 12);
     assert.ok(session.extensionRunner.getCommand('fixture-giga'));
     assert.ok(session.extensionRunner.getCommand('permission-system'));
     assert.equal(session.extensionRunner.getCommand('yolo'), undefined);

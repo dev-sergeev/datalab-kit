@@ -1,8 +1,8 @@
 # Third-party notices
 
-Datalab Kit includes the following upstream components. Their licenses and copyright notices remain in their package directories and apply to those components and their transitive dependencies. Datalab Kit modifies permission-system, plan-mode and subagents during build; see scripts/prepare-upstream.mjs. GigaChat is downloaded separately.
+Datalab Kit includes the following upstream components. Their licenses and copyright notices remain in their package directories and apply to those components and their transitive dependencies. Datalab Kit modifies permission-system, plan-mode, subagents and recap's default model during build; see scripts/prepare-upstream.mjs. GigaChat is downloaded separately.
 
-- @dev-sergeev/pi-gigachat@0.3.3: MIT, git+https://github.com/dev-sergeev/pi-gigachat.git.
+- @dev-sergeev/pi-gigachat (latest, independently installed): MIT, git+https://github.com/dev-sergeev/pi-gigachat.git.
 - @juicesharp/rpiv-ask-user-question@2.11.0: MIT, git+https://github.com/juicesharp/rpiv-mono.git.
 - pi-powerline-footer@0.17.2: MIT, git+https://github.com/nicobailon/pi-powerline-footer.git.
 - @gotgenes/pi-permission-system@33.0.5: MIT, git+https://github.com/gotgenes/pi-packages.git.
@@ -10,6 +10,10 @@ Datalab Kit includes the following upstream components. Their licenses and copyr
 - @gotgenes/pi-subagents@21.7.5: MIT, git+https://github.com/gotgenes/pi-packages.git.
 - @capdiem/pi-todo@0.3.2: MIT, git+https://github.com/capdiem/pi-extensions.git.
 - pi-rewind@0.5.0: MIT, git+https://github.com/arpagon/pi-rewind.git.
+- @tifan/pi-recap@0.4.7: MIT, git+https://github.com/tifandotme/pi-extensions.git.
+- @pi-plugins/elapsed@0.1.1: MIT, git+https://github.com/k3dom/pi-plugins.git.
+- pi-toggle-skills@0.1.20: MIT, git+https://github.com/monotykamary/pi-toggle-skills.git.
+- @zigai/pi-mention-skill@0.10.4: MIT, git+https://github.com/zigai/pi-tweaks.git.
 
 For the adapted subagents component, the upstream MIT notice is reproduced below:
 

@@ -4,10 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startKit } from './helpers/kit-session.mjs';
 
-test('all eight components load in Pi and preserve the selected provider and model', async t => {
+test('all twelve components load in Pi and preserve the selected provider and model', async t => {
   const { session, extensionsResult, agentDir, original } = await startKit(t);
   assert.deepEqual(extensionsResult.errors, []);
-  assert.equal(extensionsResult.extensions.length, 8);
+  assert.equal(extensionsResult.extensions.length, 12);
   const tools = session.getAllTools().map(tool => tool.name);
   assert.ok(tools.includes('subagent'));
   assert.ok(tools.includes('ask_user_question'));

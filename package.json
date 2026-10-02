@@ -17,7 +17,11 @@
       "./node_modules/@juicesharp/rpiv-ask-user-question/index.ts",
       "./node_modules/pi-powerline-footer/index.ts",
       "./node_modules/@capdiem/pi-todo/index.min.js",
-      "./node_modules/pi-rewind/src/index.ts"
+      "./node_modules/pi-rewind/src/index.ts",
+      "./node_modules/@tifan/pi-recap/src/index.ts",
+      "./node_modules/@pi-plugins/elapsed/dist/index.mjs",
+      "./node_modules/pi-toggle-skills/toggle-skills.ts",
+      "./node_modules/@zigai/pi-mention-skill/src/index.ts"
     ]
   },
   "scripts": {
@@ -35,12 +39,17 @@
     "@narumitw/pi-plan-mode": "0.58.3",
     "@gotgenes/pi-subagents": "21.7.5",
     "@capdiem/pi-todo": "0.3.2",
-    "pi-rewind": "0.5.0"
+    "pi-rewind": "0.5.0",
+    "@tifan/pi-recap": "0.4.7",
+    "@pi-plugins/elapsed": "0.1.1",
+    "pi-toggle-skills": "0.1.20",
+    "@zigai/pi-mention-skill": "0.10.4"
   },
   "bundleDependencies": [
     "@juicesharp/rpiv-ask-user-question", "pi-powerline-footer",
     "@gotgenes/pi-permission-system", "@narumitw/pi-plan-mode",
-    "@gotgenes/pi-subagents", "@capdiem/pi-todo", "pi-rewind"
+    "@gotgenes/pi-subagents", "@capdiem/pi-todo", "pi-rewind",
+    "@tifan/pi-recap", "@pi-plugins/elapsed", "pi-toggle-skills", "@zigai/pi-mention-skill"
   ],
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
