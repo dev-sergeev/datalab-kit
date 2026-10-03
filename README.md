@@ -17,7 +17,7 @@ pi
 npm ci --ignore-scripts --legacy-peer-deps
 npm run build
 npm pack
-pi install ./dev-sergeev-datalab-kit-0.1.2.tgz
+pi install ./dev-sergeev-datalab-kit-0.1.3.tgz
 ```
 
 Целевые системы — Linux и macOS; локальные интеграционные проверки выполнены на Linux. Проверка macOS включена в CI. Windows пока не заявляется.

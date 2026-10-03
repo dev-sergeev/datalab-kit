@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 — 2026-10-03
 
 - Добавлены `@tifan/pi-recap` 0.4.7, `@pi-plugins/elapsed` 0.1.1, `pi-toggle-skills` 0.1.20 и `@zigai/pi-mention-skill` 0.10.4; пакеты и зависимости включены в архив набора.
 - Recap по умолчанию использует Qwen без reasoning через GigaChat, включая сброс через `Use default`. Явная модель recap сохраняется; штатный таймаут 4 секунды не изменён.
