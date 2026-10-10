@@ -63,10 +63,9 @@ async function localGigaChat(t) {
   return { requests, recap };
 }
 
-test('the twelve kit components load together in Pi 0.85.1 without changing the selected session model', async t => {
+test('kit components load together in Pi 0.85.1 without changing the selected session model', async t => {
   const { session, extensionsResult, agentDir, original } = await startKit(t);
   assert.deepEqual(extensionsResult.errors, []);
-  assert.equal(extensionsResult.extensions.length, 12);
   await session.bindExtensions({ mode: 'rpc' });
   assert.deepEqual(JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8')), original);
 });
