@@ -10,6 +10,7 @@
   "files": ["dist", "scripts/postinstall.mjs", "docs/adr", "README.md", "CHANGELOG.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
   "pi": {
     "extensions": [
+      "./dist/security-extension.js",
       "./dist/extension.js",
       "./node_modules/@narumitw/pi-plan-mode/dist/index.ts",
       "./node_modules/@gotgenes/pi-permission-system/src/index.ts",
@@ -43,13 +44,16 @@
     "@tifan/pi-recap": "0.4.7",
     "@pi-plugins/elapsed": "0.1.1",
     "pi-toggle-skills": "0.1.20",
-    "@zigai/pi-mention-skill": "0.10.4"
+    "@zigai/pi-mention-skill": "0.10.4",
+    "tree-sitter-bash": "0.25.1",
+    "web-tree-sitter": "0.26.13"
   },
   "bundleDependencies": [
     "@juicesharp/rpiv-ask-user-question", "pi-powerline-footer",
     "@gotgenes/pi-permission-system", "@narumitw/pi-plan-mode",
     "@gotgenes/pi-subagents", "@capdiem/pi-todo", "pi-rewind",
-    "@tifan/pi-recap", "@pi-plugins/elapsed", "pi-toggle-skills", "@zigai/pi-mention-skill"
+    "@tifan/pi-recap", "@pi-plugins/elapsed", "pi-toggle-skills", "@zigai/pi-mention-skill",
+    "tree-sitter-bash", "web-tree-sitter"
   ],
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",

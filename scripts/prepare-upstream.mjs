@@ -8,21 +8,32 @@ const subagents = resolve(root, 'node_modules/@gotgenes/pi-subagents');
 const planMode = resolve(root, 'node_modules/@narumitw/pi-plan-mode');
 const recap = resolve(root, 'node_modules/@tifan/pi-recap');
 
-async function patch(folder, path, edits, imports = []) {
+const plannedPatches = new Map();
+function patch(folder, path, edits, imports = []) {
   const file = resolve(folder, path);
+  const pending = plannedPatches.get(file);
+  if (pending) {
+    pending.edits.push(...edits);
+    pending.imports.push(...imports);
+  } else {
+    plannedPatches.set(file, { edits: [...edits], imports: [...imports] });
+  }
+}
+
+async function applyPatch(file, { edits, imports }) {
   let text = await readFile(file, 'utf8');
   const backup = resolve(root, 'node_modules/.cache/datalab-kit', relative(root, file));
   if (text.includes('// Datalab Kit adaptation')) text = await readFile(backup, 'utf8');
   else { await mkdir(dirname(backup), { recursive: true }); await writeFile(backup, text); }
   for (const [before, after] of edits) {
     if (!text.includes(before) || text.indexOf(before) !== text.lastIndexOf(before)) {
-      throw new Error(`Upstream changed: expected one patch anchor in ${path}`);
+      throw new Error(`Upstream changed: expected one patch anchor in ${relative(root, file)}`);
     }
     text = text.replace(before, after);
   }
-  const header = imports.map(([names, module]) => {
+  const header = imports.map(([names, module, typeOnly = false]) => {
     const path = relative(dirname(file), resolve(root, 'dist', module)).replaceAll('\\', '/');
-    return `import { ${names} } from ${JSON.stringify(path.startsWith('.') ? path : './' + path)};`;
+    return `import ${typeOnly ? 'type ' : ''}{ ${names} } from ${JSON.stringify(path.startsWith('.') ? path : './' + path)};`;
   }).join('\n');
   await writeFile(file, `// Datalab Kit adaptation\n${header}\n${text}`);
 }
@@ -52,8 +63,21 @@ for (const name of ['confirmation', 'yolo']) {
 }
 
 await patch(planMode, 'dist/index.ts', [
-  ['  const persistState = () => pi.appendEntry(STATE_ENTRY_TYPE, state);', `  registerPlanModeReader(pi.events, () => state.enabled && workflowMutex.isOwner(workflowOwner) ? currentSession : undefined);
+  ['  const persistState = () => pi.appendEntry(STATE_ENTRY_TYPE, state);', `  registerPlanModeReader(
+    pi.events,
+    () => state.enabled && workflowMutex.isOwner(workflowOwner) ? currentSession : undefined,
+    async (session, request) => {
+      if (session !== currentSession || !state.enabled) return null;
+      const outcome = await kitPlanAdmission({
+        type: "tool_call", toolName: request.toolName,
+        input: { command: request.command },
+      }, { cwd: request.cwd });
+      return outcome?.block ? outcome.reason ?? "Plan mode blocks this operation" : null;
+    },
+  );
   const persistState = () => pi.appendEntry(STATE_ENTRY_TYPE, state);`],
+  ['  pi.on("tool_call", async (event, ctx) => {', '  async function kitPlanAdmission(event, ctx) {'],
+  ['  });\n  pi.on("message_start", (event) => {', '  }\n  pi.on("tool_call", kitPlanAdmission);\n  pi.on("message_start", (event) => {'],
 ], [['registerPlanModeReader', 'plan-mode.js']]);
 
 await patch(subagents, 'src/settings.ts', [['const DEFAULT_MAX_CONCURRENT = 4;', 'const DEFAULT_MAX_CONCURRENT = 1;']]);
@@ -195,3 +219,106 @@ await patch(permission, 'src/handlers/gates/bash-command.ts', [
   );`, `  const worst = pickMostRestrictive(kitWhole.origin === 'builtin' && parsedCommands !== undefined ? results : [kitWhole, ...results]);
   return worst ?? kitWhole;`],
 ], [['inspectionCommands', 'read-policy.js']]);
+
+// The classifier consumes the same AST as the native gates, before the tree is released.
+await patch(permission, 'src/access-intent/bash/program.ts', [
+  ['    private readonly resolvedRuleCandidates: readonly BashPathRuleCandidate[],', '    private readonly resolvedRuleCandidates: readonly BashPathRuleCandidate[],\n    private readonly kitAnalysis: DangerousAnalysis | null = null,'],
+  ['    if (!tree) return new BashProgram(command, [], [], []);', '    if (!tree) throw new Error("Enhanced approval: bash parser returned no tree");'],
+  ['    try {\n      return withSalvagedRoots', `    try {
+      const kitAnalysis = classifyParsedBash(tree.rootNode, {
+        cwd: normalizer.resolveBase(options?.workdir ?? ""),
+        env: process.env,
+      }, parser);
+      return withSalvagedRoots`],
+  ['          ruleCandidates,\n        );', '          ruleCandidates,\n          kitAnalysis,\n        );'],
+  ['  commandText(): string {', '  enhancedAnalysis(): DangerousAnalysis | null {\n    return this.kitAnalysis;\n  }\n\n  commandText(): string {'],
+], [['classifyParsedBash', 'enhanced-classifier.js'], ['DangerousAnalysis', 'enhanced-types.js', true]]);
+
+// Protected calls use all native vetoes, then exactly one human approval. Ordinary calls
+// still execute the unmodified native gate loop and keep their session/YOLO behavior.
+await patch(permission, 'src/handlers/gates/tool-call-gate-pipeline.ts', [
+  ['import { BashProgram }', 'import type { ExtensionContext } from "@earendil-works/pi-coding-agent";\nimport { BashProgram }'],
+  ['import { type GateResult, orderDenyFirst }', 'import { type GateResult, orderDenyFirst, isUnconditionalDeny }'],
+  ['    runner: GateRunner,\n  ): Promise<GateOutcome>', '    runner: GateRunner,\n    ctx?: ExtensionContext,\n  ): Promise<GateOutcome>'],
+  ['    const normalizer = this.inputs.getPathNormalizer();', '    const kitInvocation = shell?.command ? JSON.stringify(tcc.input) : undefined;\n    const normalizer = this.inputs.getPathNormalizer();'],
+  ['export class ToolCallGatePipeline {', 'export class ToolCallGatePipeline {\n  readonly enhancedAdapterVersion = typeof BashProgram.prototype.enhancedAnalysis === "function" ? ENHANCED_ADAPTER_VERSION : 0;'],
+  ['    for (const gate of orderDenyFirst(gates)) {', `    const kitAnalysis = bashProgram?.enhancedAnalysis();
+    if (bashProgram && kitAnalysis?.approval === "enhanced") {
+      for (const gate of gates.filter(isUnconditionalDeny)) {
+        const outcome = await runner.run(gate, tcc.agentName);
+        if (outcome.action === "block") return outcome;
+      }
+      if (!ctx) return { action: "block", reason: "Enhanced approval: no session context" };
+      const programs = [bashProgram];
+      const nativeCommands = new Set(bashProgram.commands().map(unit => unit.text));
+      for (const text of kitAnalysis.commands) {
+        if (text === bashProgram.commandText() || nativeCommands.has(text)) continue;
+        nativeCommands.add(text);
+        programs.push(await BashProgram.parse(text, normalizer, { workdir: shell?.workdir }));
+      }
+      const request = {
+        command: bashProgram.commandText(),
+        reasons: kitAnalysis.reasons,
+        cwd: normalizer.resolveBase(shell?.workdir ?? ""),
+        toolName: tcc.toolName,
+        agentName: tcc.agentName ?? null,
+        policyChecks: collectEnhancedPolicyChecks(programs, kitAnalysis, normalizer),
+      };
+      const approved = await authorizeEnhancedApproval(ctx, request);
+      if (JSON.stringify(tcc.input) !== kitInvocation) {
+        return { action: "block", reason: "Enhanced approval: invocation changed during confirmation" };
+      }
+      return approved ? { action: "allow" } : {
+        action: "block", reason: "Enhanced approval denied or unavailable; policy and Plan vetoes cannot be overridden",
+      };
+    }
+
+    for (const gate of orderDenyFirst(gates)) {`],
+], [['collectEnhancedPolicyChecks', 'enhanced-policy.js'],
+  ['authorizeEnhancedApproval', 'enhanced-runtime.js'],
+  ['ENHANCED_ADAPTER_VERSION', 'enhanced-types.js']]);
+
+await patch(permission, 'src/handlers/permission-gate-handler.ts', [
+  ['return await this.pipeline.evaluate(tcc, this.runner);', 'return await this.pipeline.evaluate(tcc, this.runner, ctx);'],
+]);
+
+await patch(permission, 'src/index.ts', [
+  ['import { PERMISSION_FORWARDING_TIMEOUT_MS }', 'import { PERMISSION_FORWARDING_TIMEOUT_MS, resolvePermissionForwardingTarget }'],
+  ['  const resolver = new PermissionResolver(permissionManager, sessionRules);', `  const resolver = new PermissionResolver(permissionManager, sessionRules);
+  const kitRawResolver = new PermissionResolver(permissionManager, { getRuleset: () => [] });`],
+  ['      logger,\n    ),\n  );\n}', `      logger,
+    ),
+  );
+  if (toolCallGatePipeline.enhancedAdapterVersion !== ENHANCED_ADAPTER_VERSION) return;
+  registerEnhancedAdapter(pi, {
+    version: ENHANCED_ADAPTER_VERSION,
+    upstreamVersion: PERMISSION_SYSTEM_VERSION,
+    veto: async (request) => {
+      const kitPlanVeto = await vetoPlanInvocation(pi.events, kitSession, request);
+      if (kitPlanVeto !== null) return kitPlanVeto;
+      for (const check of request.policyChecks) {
+        const result = kitRawResolver.resolve({
+          kind: "path-values", surface: check.surface,
+          values: check.matchValues, agentName: request.agentName ?? undefined,
+        });
+        if (result.state === "deny") {
+          return result.reason ?? "Permission denied by " + check.surface + " rule";
+        }
+      }
+      return null;
+    },
+    parentSessionId: (ctx) => resolvePermissionForwardingTarget({
+      isSubagent: subagentDetection.isSubagent(ctx),
+      currentSessionId: ctx.sessionManager.getSessionId(),
+      sessionId: ctx.sessionManager.getSessionId(),
+      registry: subagentRegistry,
+    })?.sessionId,
+    isSubagent: (ctx) => subagentDetection.isSubagent(ctx),
+    agentName: (ctx) => session.resolveAgentName(ctx) ?? null,
+  });
+}`],
+], [['registerEnhancedAdapter', 'enhanced-runtime.js'],
+  ['ENHANCED_ADAPTER_VERSION, PERMISSION_SYSTEM_VERSION', 'enhanced-types.js'],
+  ['vetoPlanInvocation', 'plan-mode.js']]);
+
+for (const [file, changes] of plannedPatches) await applyPatch(file, changes);

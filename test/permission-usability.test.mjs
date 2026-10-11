@@ -52,23 +52,23 @@ test('inspection matrix crosses real permission gates without false prompts', as
 });
 
 test('writes, nested execution, external mutation and option injection still prompt', async t => {
-  const { runner, prompts } = await start(t);
+  const { runner, prompts, typedPrompts } = await start(t);
   for (const command of changes) {
-    const before = prompts.length;
+    const before = prompts.length + typedPrompts.length;
     assert.equal((await call(runner, 'bash', { command }))?.block, true, command);
-    assert.ok(prompts.length > before, command);
+    assert.ok(prompts.length + typedPrompts.length > before, command);
   }
 });
 
 test('read-only prefixes and pipelines cannot hide a modifying operation', async t => {
-  const { runner, prompts } = await start(t);
+  const { runner, prompts, typedPrompts } = await start(t);
   for (const prefix of ['echo checking', 'grep foo *.ts | head', 'git status']) {
     for (const operator of [' && ', ' | ']) {
       for (const change of changes) {
         const command = prefix + operator + change;
-        const before = prompts.length;
+        const before = prompts.length + typedPrompts.length;
         assert.equal((await call(runner, 'bash', { command }))?.block, true, command);
-        assert.ok(prompts.length > before, command);
+        assert.ok(prompts.length + typedPrompts.length > before, command);
       }
     }
   }
@@ -143,25 +143,27 @@ test('stock YOLO approves asks and preserves denies without bespoke commands or 
   assert.equal(runner.getCommand('yolo'), undefined);
   assert.ok(runner.getCommand('permission-system'));
   assert.equal(statuses.get('pi-permission-system'), 'yolo');
-  for (const command of ['rm file', 'npm install', 'bash -c "rm file"', 'cat $(rm file)']) {
+  for (const command of ['npm install', 'bash -c "npm install"', 'cat $(npm root)']) {
     assert.notEqual((await call(runner, 'bash', { command }))?.block, true, command);
   }
   assert.equal((await call(runner, 'bash', { command: 'cat a && git push' }))?.block, true);
   assert.equal(prompts.length, 0);
   await runner.emit({ type: 'session_start', reason: 'new' });
-  assert.notEqual((await call(runner, 'bash', { command: 'rm file' }))?.block, true);
+  assert.notEqual((await call(runner, 'bash', { command: 'npm install' }))?.block, true);
   assert.equal(prompts.length, 0);
   assert.equal(await readFile(path, 'utf8'), original);
 });
 
 test('stock YOLO cannot loosen Plan mode', async t => {
-  const { runner, prompts } = await start(t, { yoloMode: true }, 'No', { planMode: true });
+  const { runner, prompts, typedPrompts } = await start(t, { yoloMode: true }, 'No', { planMode: true, typedAnswer: 'yes' });
   await runner.getCommand('plan').handler('start', runner.createCommandContext());
   assert.equal((await call(runner, 'bash', { command: 'rm file' }))?.block, true);
   assert.equal(prompts.length, 0);
+  assert.equal(typedPrompts.length, 0);
   await runner.getCommand('plan').handler('off', runner.createCommandContext());
   assert.notEqual((await call(runner, 'bash', { command: 'rm file' }))?.block, true);
   assert.equal(prompts.length, 0);
+  assert.equal(typedPrompts.length, 1);
 });
 
 test('YOLO preserves user path and tool denies while approving explicit asks', async t => {

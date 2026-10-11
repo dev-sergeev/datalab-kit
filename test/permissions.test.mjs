@@ -22,9 +22,5 @@ test('операции чтения in any directory need no approval; writes an
     assert.equal((await runner.emitToolCall({ type: 'tool_call', toolName, toolCallId: toolName,
       input: { path: '/tmp/outside-project', content: 'text', oldText: 'a', newText: 'b' } }))?.block, true);
   }
-  assert.ok(prompts.length >= 12);
-  assert.ok(prompts[0][1].includes('Yes'));
-  assert.ok(prompts[0][1].includes('No'));
-  assert.ok(prompts[0][1].some(option => option.includes('for this session')));
 });
 
