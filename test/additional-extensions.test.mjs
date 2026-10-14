@@ -6,7 +6,6 @@ import { createServer } from 'node:http';
 import { createAgentSession, SettingsManager, SessionManager } from '@earendil-works/pi-coding-agent';
 import { CombinedAutocompleteProvider } from '@earendil-works/pi-tui';
 import { agentSandbox } from './helpers/agent-sandbox.mjs';
-import { startKit } from './helpers/kit-session.mjs';
 
 async function startAdditional(t, { recapConfig, skill } = {}) {
   const { cwd, agentDir, trackSession } = await agentSandbox(t);
@@ -31,13 +30,14 @@ async function startAdditional(t, { recapConfig, skill } = {}) {
   return { session, extensionsResult, cwd, agentDir, recapPath, original };
 }
 
-async function localGigaChat(t) {
+async function localGigaChat(t, responseDelayMs = 0) {
   const requests = [];
   const recap = 'Adding four Pi extensions. Defaults preserve user settings; verify the integration.';
   const server = createServer(async (request, response) => {
     let body = '';
     for await (const chunk of request) body += chunk;
     requests.push({ path: request.url, authorization: request.headers.authorization, body: JSON.parse(body) });
+    if (responseDelayMs) await new Promise(resolve => setTimeout(resolve, responseDelayMs));
     response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
       choices: [{ index: 0, message: { role: 'assistant', content: recap }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 30, completion_tokens: 15, total_tokens: 45 },
@@ -63,28 +63,6 @@ async function localGigaChat(t) {
   return { requests, recap };
 }
 
-test('the twelve kit components load together in Pi 0.85.1 without changing the selected session model', async t => {
-  const { session, extensionsResult, agentDir, original } = await startKit(t);
-  assert.deepEqual(extensionsResult.errors, []);
-  assert.equal(extensionsResult.extensions.length, 12);
-  await session.bindExtensions({ mode: 'rpc' });
-  assert.deepEqual(JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8')), original);
-});
-
-test('recap starts with Qwen while preserving the selected session model', async t => {
-  const { session, recapPath, agentDir, original } = await startAdditional(t);
-  await session.bindExtensions({ mode: 'rpc' });
-  assert.equal(JSON.parse(await readFile(recapPath, 'utf8')).model, 'gigachat/Qwen3.5-397b');
-  assert.deepEqual(JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8')), original);
-});
-
-test('an existing recap config without a model gets the default and retains unrelated preferences', async t => {
-  const original = { userSetting: { keep: true } };
-  const { session, recapPath } = await startAdditional(t, { recapConfig: original });
-  await session.bindExtensions({ mode: 'rpc' });
-  assert.deepEqual(JSON.parse(await readFile(recapPath, 'utf8')), { ...original, model: 'gigachat/Qwen3.5-397b' });
-});
-
 for (const config of ['{invalid JSON', '{"model":42,"userSetting":true}', '{"model":"bad-model","userSetting":true}']) {
   test(`an invalid explicit recap config is not overwritten: ${config}`, async t => {
     const { session, recapPath } = await startAdditional(t, { recapConfig: config });
@@ -94,70 +72,81 @@ for (const config of ['{invalid JSON', '{"model":42,"userSetting":true}', '{"mod
   });
 }
 
-for (const model of [undefined, 'gigachat/glm-5.2']) {
-  test(`recap generates with ${model ?? 'the Qwen default'} and keeps the user preference after reload`, async t => {
-    const { requests, recap } = await localGigaChat(t);
-    const config = model === undefined ? undefined : { model, userSetting: { keep: true } };
-    const { session, recapPath } = await startAdditional(t, { recapConfig: config });
-    const notices = [];
-    const widgets = new Map();
-    await session.bindExtensions({ mode: 'rpc', uiContext: { ...session.extensionRunner.getUIContext(),
-      notify: (...notice) => notices.push(notice),
-      setWidget: (name, widget) => widgets.set(name, widget),
-    } });
-    const mainModel = session.modelRuntime.getModel('gigachat', 'glm-5.2');
-    assert.ok(mainModel);
-    await session.setModel(mainModel);
+test('an explicit recap model survives reload without changing the session selection', async t => {
+  const { requests, recap } = await localGigaChat(t);
+  const config = { model: 'gigachat/glm-5.2', userSetting: { keep: true } };
+  const { session, recapPath } = await startAdditional(t, { recapConfig: config });
+  const notices = [];
+  const widgets = new Map();
+  await session.bindExtensions({ mode: 'rpc', uiContext: { ...session.extensionRunner.getUIContext(),
+    notify: (...notice) => notices.push(notice),
+    setWidget: (name, widget) => widgets.set(name, widget),
+  } });
+  const mainModel = session.modelRuntime.getModel('gigachat', 'Qwen3.5-397b');
+  assert.ok(mainModel);
+  await session.setModel(mainModel);
+  session.setThinkingLevel('high');
+  session.sessionManager.appendMessage({ role: 'user', content: 'Add four extensions and preserve user settings.', timestamp: 1 });
+  await session.prompt('/recap');
+  assert.equal(requests.length, 1, JSON.stringify(notices));
+  assert.equal(requests[0].path, '/v1/chat/completions');
+  assert.equal(requests[0].authorization, 'Bearer local-fixture-token');
+  assert.equal(requests[0].body.model, 'glm-5.2');
+  assert.match(requests[0].body.messages.at(-1).content, /preserve user settings/);
+  const widget = widgets.get('pi-recap');
+  assert.equal(typeof widget, 'function', JSON.stringify(notices));
+  const theme = { fg: (_color, text) => text, bold: text => text };
+  assert.match(widget({}, theme).render(200).join('\n'), new RegExp(recap.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.equal(session.model.id, 'Qwen3.5-397b');
+  assert.equal(session.thinkingLevel, 'high');
+  const beforeReload = await readFile(recapPath, 'utf8');
+  assert.deepEqual(JSON.parse(beforeReload), config);
+  await session.reload();
+  assert.equal(await readFile(recapPath, 'utf8'), beforeReload);
+});
+
+test('recap follows model changes without inheriting session thinking and accepts slow responses', async t => {
+  const { requests, recap } = await localGigaChat(t, 4_500);
+  const { session } = await startAdditional(t);
+  const widgets = new Map();
+  const notices = [];
+  await session.bindExtensions({ mode: 'rpc', uiContext: { ...session.extensionRunner.getUIContext(),
+    notify: (...notice) => notices.push(notice),
+    setWidget: (name, widget) => widgets.set(name, widget),
+  } });
+  session.sessionManager.appendMessage({ role: 'user', content: 'Summarize the current work.', timestamp: 1 });
+  for (const id of ['glm-5.2', 'Qwen3.5-397b']) {
+    await session.setModel(session.modelRuntime.getModel('gigachat', id));
     session.setThinkingLevel('high');
-    session.sessionManager.appendMessage({ role: 'user', content: 'Add four extensions and preserve user settings.', timestamp: 1 });
     await session.prompt('/recap');
-    assert.equal(requests.length, 1, JSON.stringify(notices));
-    assert.equal(requests[0].path, '/v1/chat/completions');
-    assert.equal(requests[0].authorization, 'Bearer local-fixture-token');
-    assert.equal(requests[0].body.model, model === undefined ? 'Qwen3.5-397b' : 'glm-5.2');
-    if (model === undefined) assert.equal(requests[0].body.reasoning_effort, 'off');
-    assert.match(requests[0].body.messages.at(-1).content, /preserve user settings/);
+    assert.equal(requests.at(-1).body.model, id);
+    assert.equal(requests.at(-1).body.reasoning_effort, 'off');
+    assert.equal(session.thinkingLevel, 'high');
     const widget = widgets.get('pi-recap');
     assert.equal(typeof widget, 'function', JSON.stringify(notices));
     const theme = { fg: (_color, text) => text, bold: text => text };
-    assert.match(widget({}, theme).render(200).join('\n'), new RegExp(recap.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-    assert.equal(session.model.id, 'glm-5.2');
-    assert.equal(session.thinkingLevel, 'high');
-    const beforeReload = await readFile(recapPath, 'utf8');
-    if (config) assert.deepEqual(JSON.parse(beforeReload), config);
-    await session.reload();
-    assert.equal(await readFile(recapPath, 'utf8'), beforeReload);
-    await session.prompt('/recap status');
-    assert.match(notices.at(-1)[0], new RegExp(`selected model: ${model ?? 'gigachat/Qwen3.5-397b'}`));
-  });
-}
+    assert.ok(widget({}, theme).render(200).join('\n').includes(recap), JSON.stringify(notices));
+  }
+});
 
-test('resetting the recap picker to Use default immediately selects Qwen without reloading', async t => {
+test('resetting an explicit recap model resumes following the current session immediately', async t => {
   const { requests } = await localGigaChat(t);
   const { session } = await startAdditional(t, { recapConfig: { model: 'gigachat/glm-5.2' } });
-  const notices = [];
   const theme = { fg: (_color, text) => text, bold: text => text };
   await session.bindExtensions({ mode: 'rpc', uiContext: { ...session.extensionRunner.getUIContext(),
-    notify: (...notice) => notices.push(notice),
     custom: async factory => {
       let selection;
       const component = await factory({ requestRender() {} }, theme, {}, result => { selection = result; });
-      assert.match(component.render(100).join('\n'), /→ Use default/);
       component.handleInput('\r');
-      assert.ok(selection, 'Enter selects the highlighted default row');
       return selection;
     },
   } });
-  await session.setModel(session.modelRuntime.getModel('gigachat', 'glm-5.2'));
+  await session.setModel(session.modelRuntime.getModel('gigachat', 'Qwen3.5-397b'));
   await session.prompt('/recap config');
-  await session.prompt('/recap status');
-  assert.match(notices.at(-1)[0], /selected model: gigachat\/Qwen3\.5-397b \(default\)/);
-  session.sessionManager.appendMessage({ role: 'user', content: 'Verify the recap default in the current session.', timestamp: 1 });
+  session.sessionManager.appendMessage({ role: 'user', content: 'Verify the reset.', timestamp: 1 });
   await session.prompt('/recap');
-  assert.equal(requests.length, 1, JSON.stringify(notices));
+  assert.equal(requests.length, 1);
   assert.equal(requests[0].body.model, 'Qwen3.5-397b');
-  assert.equal(requests[0].body.reasoning_effort, 'off');
-  assert.equal(session.model.id, 'glm-5.2');
 });
 
 test('elapsed counts the full TUI run across tool turns and restores the working indicator at the end', async t => {

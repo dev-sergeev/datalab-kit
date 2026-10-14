@@ -32,24 +32,37 @@ for (const [folder, version] of [[permission, '33.0.5'], [subagents, '21.7.5'], 
   if (pkg.version !== version) throw new Error(`Unsupported upstream ${pkg.name}@${pkg.version}`);
 }
 
-// Keep the same default after /recap config -> Use default, which removes the
-// saved config. Changing only the default also updates the model picker label.
-await patch(recap, 'src/models.ts', [
-  ['  provider: "openai-codex",\n  id: "gpt-5.6-luna",', '  provider: "gigachat",\n  id: "Qwen3.5-397b",'],
-]);
-
-// Restore former UI adaptations when rebuilding an existing 0.1.1 checkout.
+// Restore former UI adaptations when rebuilding an existing checkout.
 // Clean obsolete outputs too: tsc does not remove files for deleted sources.
-for (const path of ['src/config/config-store.ts', 'src/authority/permission-prompt-component.ts']) {
-  const file = resolve(permission, path);
+for (const [folder, path] of [
+  [permission, 'src/config/config-store.ts'],
+  [permission, 'src/authority/permission-prompt-component.ts'],
+]) {
+  const file = resolve(folder, path);
   if ((await readFile(file, 'utf8')).includes('// Datalab Kit adaptation')) {
     const backup = resolve(root, 'node_modules/.cache/datalab-kit', relative(root, file));
     await writeFile(file, await readFile(backup, 'utf8'));
   }
 }
-for (const name of ['confirmation', 'yolo']) {
+for (const name of ['confirmation', 'yolo', 'recap']) {
   for (const extension of ['js', 'd.ts']) await rm(resolve(root, 'dist', `${name}.${extension}`), { force: true });
 }
+
+await patch(recap, 'src/models.ts', [
+  ['export const DEFAULT_RECAP_MODEL: RecapModelPreference = {\n  provider: "openai-codex",\n  id: "gpt-5.6-luna",\n}\n\n', ''],
+  ['  const defaultAuth = await getModelAuth(ctx, DEFAULT_RECAP_MODEL)', `  const defaultAuth = ctx.model
+    ? await getModelAuth(ctx, ctx.model)
+    : undefined`],
+  ['    model: DEFAULT_RECAP_MODEL,', '    model: ctx.model,'],
+]);
+await patch(recap, 'src/model-picker.ts', [
+  ['  DEFAULT_RECAP_MODEL,\n', ''],
+  ['description: formatRecapModelKey(DEFAULT_RECAP_MODEL),', 'description: "Current session model",'],
+]);
+await patch(recap, 'src/index.ts', [
+  ['const RECAP_REQUEST_TIMEOUT_MS = 4_000', 'const RECAP_REQUEST_TIMEOUT_MS = 60_000'],
+  ['const AWAY_RECAP_DELAY_MS = 5 * 60 * 1_000', 'const AWAY_RECAP_DELAY_MS = 2 * 60 * 1_000'],
+]);
 
 await patch(planMode, 'dist/index.ts', [
   ['  const persistState = () => pi.appendEntry(STATE_ENTRY_TYPE, state);', `  registerPlanModeReader(pi.events, () => state.enabled && workflowMutex.isOwner(workflowOwner) ? currentSession : undefined);

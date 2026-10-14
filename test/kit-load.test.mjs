@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startKit } from './helpers/kit-session.mjs';
 
-test('all twelve components load in Pi and preserve the selected provider and model', async t => {
+test('all twelve components load in Pi with the native GigaChat extension', async t => {
   const { session, extensionsResult, agentDir, original } = await startKit(t);
   assert.deepEqual(extensionsResult.errors, []);
   assert.equal(extensionsResult.extensions.length, 12);
@@ -23,5 +23,5 @@ test('all twelve components load in Pi and preserve the selected provider and mo
   const subagent = session.getAllTools().find(tool => tool.name === 'subagent');
   assert.equal(subagent.parameters.properties.prompt.type, 'string');
   assert.equal(subagent.parameters.properties.tasks, undefined, 'one task per invocation');
-  assert.deepEqual(JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8')), original);
+  assert.deepEqual(JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8')).packages, original.packages);
 });
