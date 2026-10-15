@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { createAgentSession, SettingsManager, SessionManager } from '@earendil-works/pi-coding-agent';
 import { CombinedAutocompleteProvider } from '@earendil-works/pi-tui';
 import { agentSandbox } from './helpers/agent-sandbox.mjs';
+import { isolateGigaChatEnv } from './helpers/kit-session.mjs';
 
 async function startAdditional(t, { recapConfig, skill } = {}) {
   const { cwd, agentDir, trackSession } = await agentSandbox(t);
@@ -30,7 +31,7 @@ async function startAdditional(t, { recapConfig, skill } = {}) {
   return { session, extensionsResult, cwd, agentDir, recapPath, original };
 }
 
-async function localGigaChat(t, responseDelayMs = 0) {
+async function localDataLab(t, responseDelayMs = 0) {
   const requests = [];
   const recap = 'Adding four Pi extensions. Defaults preserve user settings; verify the integration.';
   const server = createServer(async (request, response) => {
@@ -44,22 +45,15 @@ async function localGigaChat(t, responseDelayMs = 0) {
     }));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const changes = { GIGACHAT_ACCESS_TOKEN: 'local-fixture-token',
-    GIGACHAT_BASE_URL: `http://127.0.0.1:${server.address().port}/v1`, GIGACHAT_STREAM: 'false',
+  isolateGigaChatEnv(t, {
+    JPY_API_TOKEN: 'local-fixture-token',
+    GIGACHAT_API_URL: `http://127.0.0.1:${server.address().port}/v1`, GIGACHAT_STREAM: 'false',
     GIGACHAT_EXTRA_BODY: '{}', GIGACHAT_REASONING_IN_CONTENT: 'false', GIGACHAT_MAX_RETRIES: '0',
     GIGACHAT_SYSTEM_PROMPT: '', NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost',
-  };
-  const names = new Set([...Object.keys(process.env).filter(name => name.startsWith('GIGACHAT_')),
-    ...Object.keys(changes), 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy']);
-  const previous = Object.fromEntries([...names].map(name => [name, process.env[name]]));
-  for (const name of names) delete process.env[name];
-  Object.assign(process.env, changes);
-  t.after(async () => {
-    for (const [name, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[name]; else process.env[name] = value;
-    }
-    await new Promise(resolve => server.close(resolve));
+    HTTP_PROXY: undefined, HTTPS_PROXY: undefined, ALL_PROXY: undefined,
+    http_proxy: undefined, https_proxy: undefined, all_proxy: undefined,
   });
+  t.after(() => new Promise(resolve => server.close(resolve)));
   return { requests, recap };
 }
 
@@ -73,8 +67,8 @@ for (const config of ['{invalid JSON', '{"model":42,"userSetting":true}', '{"mod
 }
 
 test('an explicit recap model survives reload without changing the session selection', async t => {
-  const { requests, recap } = await localGigaChat(t);
-  const config = { model: 'gigachat/glm-5.2', userSetting: { keep: true } };
+  const { requests, recap } = await localDataLab(t);
+  const config = { model: 'DataLab/glm-5.2', userSetting: { keep: true } };
   const { session, recapPath } = await startAdditional(t, { recapConfig: config });
   const notices = [];
   const widgets = new Map();
@@ -82,7 +76,7 @@ test('an explicit recap model survives reload without changing the session selec
     notify: (...notice) => notices.push(notice),
     setWidget: (name, widget) => widgets.set(name, widget),
   } });
-  const mainModel = session.modelRuntime.getModel('gigachat', 'Qwen3.5-397b');
+  const mainModel = session.modelRuntime.getModel('DataLab', 'Qwen3.5-397b');
   assert.ok(mainModel);
   await session.setModel(mainModel);
   session.setThinkingLevel('high');
@@ -106,7 +100,7 @@ test('an explicit recap model survives reload without changing the session selec
 });
 
 test('recap follows model changes without inheriting session thinking and accepts slow responses', async t => {
-  const { requests, recap } = await localGigaChat(t, 4_500);
+  const { requests, recap } = await localDataLab(t, 4_500);
   const { session } = await startAdditional(t);
   const widgets = new Map();
   const notices = [];
@@ -116,7 +110,7 @@ test('recap follows model changes without inheriting session thinking and accept
   } });
   session.sessionManager.appendMessage({ role: 'user', content: 'Summarize the current work.', timestamp: 1 });
   for (const id of ['glm-5.2', 'Qwen3.5-397b']) {
-    await session.setModel(session.modelRuntime.getModel('gigachat', id));
+    await session.setModel(session.modelRuntime.getModel('DataLab', id));
     session.setThinkingLevel('high');
     await session.prompt('/recap');
     assert.equal(requests.at(-1).body.model, id);
@@ -130,8 +124,8 @@ test('recap follows model changes without inheriting session thinking and accept
 });
 
 test('resetting an explicit recap model resumes following the current session immediately', async t => {
-  const { requests } = await localGigaChat(t);
-  const { session } = await startAdditional(t, { recapConfig: { model: 'gigachat/glm-5.2' } });
+  const { requests } = await localDataLab(t);
+  const { session } = await startAdditional(t, { recapConfig: { model: 'DataLab/glm-5.2' } });
   const theme = { fg: (_color, text) => text, bold: text => text };
   await session.bindExtensions({ mode: 'rpc', uiContext: { ...session.extensionRunner.getUIContext(),
     custom: async factory => {
@@ -141,7 +135,7 @@ test('resetting an explicit recap model resumes following the current session im
       return selection;
     },
   } });
-  await session.setModel(session.modelRuntime.getModel('gigachat', 'Qwen3.5-397b'));
+  await session.setModel(session.modelRuntime.getModel('DataLab', 'Qwen3.5-397b'));
   await session.prompt('/recap config');
   session.sessionManager.appendMessage({ role: 'user', content: 'Verify the reset.', timestamp: 1 });
   await session.prompt('/recap');
@@ -196,7 +190,7 @@ test('elapsed stays idle outside TUI mode', async t => {
 });
 
 test('a skill hidden by the stock toggle UI remains selectable and manually usable through $ after reload', async t => {
-  const { requests } = await localGigaChat(t);
+  const { requests } = await localDataLab(t);
   const skill = '---\nname: kit-skill\ndescription: Offline kit integration skill\n---\nUse the local fixture instructions.\n';
   const { session, cwd } = await startAdditional(t, { skill });
   const notices = [];
@@ -228,7 +222,7 @@ test('a skill hidden by the stock toggle UI remains selectable and manually usab
   assert.equal(slash?.items.some(item => item.value === 'skill:kit-skill'), false);
   const dollar = await autocomplete.getSuggestions(['$kit-'], 0, 5, { signal });
   assert.ok(dollar?.items.some(item => item.label === 'kit-skill'), JSON.stringify(dollar));
-  await session.setModel(session.modelRuntime.getModel('gigachat', 'Qwen3.5-397b'));
+  await session.setModel(session.modelRuntime.getModel('DataLab', 'Qwen3.5-397b'));
   await session.prompt('Apply $kit-skill to this task.');
   assert.equal(requests.length, 1, JSON.stringify(notices));
   const content = requests[0].body.messages.find(message => message.role === 'user').content;
