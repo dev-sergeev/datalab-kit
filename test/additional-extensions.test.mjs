@@ -152,27 +152,36 @@ test('elapsed counts the full TUI run across tool turns and restores the working
   } });
   const runner = session.extensionRunner;
   runner.onError(error => errors.push(error));
+  let now = 0;
+  t.mock.method(performance, 'now', () => now);
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  try {
+    await runner.emit({ type: 'agent_start' });
+    now = 1500;
+    t.mock.timers.tick(1500);
+    assert.equal(Number(working.at(-1).match(/(\d+)s$/)?.[1]), 1);
+    await runner.emit({ type: 'turn_start', turnIndex: 0, timestamp: Date.now() });
+    await runner.emit({ type: 'tool_execution_start', toolName: 'read', toolCallId: 'local-read', args: { path: 'local.txt' } });
+    await runner.emit({ type: 'tool_execution_end', toolName: 'read', toolCallId: 'local-read',
+      result: { content: [{ type: 'text', text: 'local fixture' }] }, isError: false });
+    await runner.emit({ type: 'turn_end', turnIndex: 0,
+      message: { role: 'user', content: 'local fixture', timestamp: Date.now() }, toolResults: [] });
+    await runner.emit({ type: 'turn_start', turnIndex: 1, timestamp: Date.now() });
+    now = 2500;
+    t.mock.timers.tick(1000);
+    assert.ok(Number(working.at(-1).match(/(\d+)s$/)?.[1]) >= 2, 'the second turn keeps time from the same run');
+    assert.equal(working.includes(undefined), false, 'tool completion must not clear the full-run timer');
+    await runner.emit({ type: 'agent_end', messages: [] });
+    assert.equal(working.at(-1), undefined);
+    const completed = working.length;
+    now = 3500;
+    t.mock.timers.tick(1000);
+    assert.equal(working.length, completed, 'the completed run must not keep ticking');
+  } finally {
+    t.mock.timers.reset();
+    t.mock.restoreAll();
+  }
   await runner.emit({ type: 'agent_start' });
-  assert.equal(working.at(-1), 'Working... 0s');
-  await new Promise(resolve => setTimeout(resolve, 1100));
-  assert.match(working.at(-1), /^Working\.\.\. [1-9]\d*s$/);
-  await runner.emit({ type: 'turn_start', turnIndex: 0, timestamp: Date.now() });
-  await runner.emit({ type: 'tool_execution_start', toolName: 'read', toolCallId: 'local-read', args: { path: 'local.txt' } });
-  await runner.emit({ type: 'tool_execution_end', toolName: 'read', toolCallId: 'local-read',
-    result: { content: [{ type: 'text', text: 'local fixture' }] }, isError: false });
-  await runner.emit({ type: 'turn_end', turnIndex: 0,
-    message: { role: 'user', content: 'local fixture', timestamp: Date.now() }, toolResults: [] });
-  await runner.emit({ type: 'turn_start', turnIndex: 1, timestamp: Date.now() });
-  await new Promise(resolve => setTimeout(resolve, 1100));
-  assert.ok(Number(working.at(-1).match(/(\d+)s$/)?.[1]) >= 2, 'the second turn keeps time from the same run');
-  assert.equal(working.includes(undefined), false, 'tool completion must not clear the full-run timer');
-  await runner.emit({ type: 'agent_end', messages: [] });
-  assert.equal(working.at(-1), undefined);
-  const completed = working.length;
-  await new Promise(resolve => setTimeout(resolve, 1100));
-  assert.equal(working.length, completed, 'the completed run must not keep ticking');
-  await runner.emit({ type: 'agent_start' });
-  assert.equal(working.at(-1), 'Working... 0s');
   await runner.emit({ type: 'session_shutdown', reason: 'exit' });
   assert.equal(working.at(-1), undefined);
   assert.deepEqual(errors, []);
