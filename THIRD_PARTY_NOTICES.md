@@ -14,6 +14,9 @@ Datalab Kit includes the following upstream components. Their licenses and copyr
 - @pi-plugins/elapsed@0.1.1: MIT, git+https://github.com/k3dom/pi-plugins.git.
 - pi-toggle-skills@0.1.20: MIT, git+https://github.com/monotykamary/pi-toggle-skills.git.
 - @zigai/pi-mention-skill@0.10.4: MIT, git+https://github.com/zigai/pi-tweaks.git.
+- Anthropic skill-creator: Apache-2.0, https://github.com/anthropics/skills/tree/dbd4588f9e1033efb41dad4bef2f7947c8993d44/skills/skill-creator. Source revision: `dbd4588f9e1033efb41dad4bef2f7947c8993d44`; copyright 2026 Anthropic, PBC. License retained at `skills/skill-creator/LICENSE.txt`.
+
+The skill-creator copy is adapted for Pi: instructions, destinations, isolated evaluation and description optimization through Pi's JSON CLI, honest missing-telemetry and repetition reporting, Pi frontmatter validation, and review metadata/server behavior. Modified files carry notices. Python resources, supporting agent instructions, schemas, viewer assets, and the complete Apache-2.0 license are included in the npm package; Claude Code is not required.
 
 For the adapted subagents component, the upstream MIT notice is reproduced below:
 

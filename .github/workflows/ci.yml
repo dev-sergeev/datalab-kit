@@ -12,8 +12,18 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python3 -m pip install PyYAML
       - run: npm ci --ignore-scripts --legacy-peer-deps
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
+      - name: Validate bundled skills
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 skills/skill-creator/scripts/quick_validate.py skills/init
+          python3 skills/skill-creator/scripts/quick_validate.py skills/skill-creator
       - run: npm pack

@@ -1,13 +1,30 @@
 {
   "name": "@dev-sergeev/datalab-kit",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A ready-to-use collection of Pi coding agent extensions",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=22.19.0" },
-  "keywords": ["pi-package", "pi-coding-agent", "gigachat"],
-  "publishConfig": { "access": "public" },
-  "files": ["dist", "scripts/postinstall.mjs", "docs/adr", "README.md", "CHANGELOG.md", "LICENSE", "THIRD_PARTY_NOTICES.md"],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-coding-agent",
+    "gigachat"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "scripts/postinstall.mjs",
+    "docs/adr",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
   "pi": {
     "extensions": [
       "./dist/extension.js",
@@ -22,6 +39,9 @@
       "./node_modules/@pi-plugins/elapsed/dist/index.mjs",
       "./node_modules/pi-toggle-skills/toggle-skills.ts",
       "./node_modules/@zigai/pi-mention-skill/src/index.ts"
+    ],
+    "skills": [
+      "./skills"
     ]
   },
   "scripts": {
@@ -46,10 +66,17 @@
     "@zigai/pi-mention-skill": "0.10.4"
   },
   "bundleDependencies": [
-    "@juicesharp/rpiv-ask-user-question", "pi-powerline-footer",
-    "@gotgenes/pi-permission-system", "@narumitw/pi-plan-mode",
-    "@gotgenes/pi-subagents", "@capdiem/pi-todo", "pi-rewind",
-    "@tifan/pi-recap", "@pi-plugins/elapsed", "pi-toggle-skills", "@zigai/pi-mention-skill"
+    "@juicesharp/rpiv-ask-user-question",
+    "pi-powerline-footer",
+    "@gotgenes/pi-permission-system",
+    "@narumitw/pi-plan-mode",
+    "@gotgenes/pi-subagents",
+    "@capdiem/pi-todo",
+    "pi-rewind",
+    "@tifan/pi-recap",
+    "@pi-plugins/elapsed",
+    "pi-toggle-skills",
+    "@zigai/pi-mention-skill"
   ],
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
