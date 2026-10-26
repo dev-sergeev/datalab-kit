@@ -1,12 +1,30 @@
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const permission = resolve(root, 'node_modules/@gotgenes/pi-permission-system');
 const subagents = resolve(root, 'node_modules/@gotgenes/pi-subagents');
 const planMode = resolve(root, 'node_modules/@narumitw/pi-plan-mode');
 const recap = resolve(root, 'node_modules/@tifan/pi-recap');
+
+// Bundle upstream helpers; Pi's root alias cannot resolve pi-ai deep imports.
+await build({
+  entryPoints: [resolve(root, 'src/gigachat-stream.ts')],
+  outfile: resolve(root, 'dist/gigachat-stream.js'),
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  external: ['undici', 'proper-lockfile'],
+  target: 'node22',
+  plugins: [{
+    name: 'pi-host-api',
+    setup(build) {
+      build.onResolve({ filter: /^@earendil-works\/(?:pi-ai|pi-coding-agent|pi-tui)$/ }, args => ({ path: args.path, external: true }));
+    },
+  }],
+});
 
 async function patch(folder, path, edits, imports = []) {
   const file = resolve(folder, path);

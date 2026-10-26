@@ -1,6 +1,6 @@
 {
   "name": "@dev-sergeev/datalab-kit",
-  "version": "0.1.6",
+  "version": "0.1.8",
   "description": "A ready-to-use collection of Pi coding agent extensions",
   "type": "module",
   "license": "MIT",
@@ -52,7 +52,7 @@
     "postinstall": "node scripts/postinstall.mjs"
   },
   "dependencies": {
-    "@dev-sergeev/pi-gigachat": "latest",
+    "@dev-sergeev/pi-gigachat": "0.6.5",
     "@juicesharp/rpiv-ask-user-question": "2.11.0",
     "pi-powerline-footer": "0.17.2",
     "@gotgenes/pi-permission-system": "33.0.5",
@@ -63,7 +63,9 @@
     "@tifan/pi-recap": "0.4.7",
     "@pi-plugins/elapsed": "0.1.1",
     "pi-toggle-skills": "0.1.20",
-    "@zigai/pi-mention-skill": "0.10.4"
+    "@zigai/pi-mention-skill": "0.10.4",
+    "proper-lockfile": "4.1.2",
+    "undici": "8.11.2"
   },
   "bundleDependencies": [
     "@juicesharp/rpiv-ask-user-question",
@@ -76,12 +78,14 @@
     "@tifan/pi-recap",
     "@pi-plugins/elapsed",
     "pi-toggle-skills",
-    "@zigai/pi-mention-skill"
+    "@zigai/pi-mention-skill",
+    "proper-lockfile",
+    "undici"
   ],
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*",
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
     "typebox": "*"
   },
   "devDependencies": {
@@ -89,6 +93,7 @@
     "@earendil-works/pi-coding-agent": "0.85.1",
     "@earendil-works/pi-tui": "0.85.1",
     "@types/node": "^24.0.0",
+    "esbuild": "0.28.1",
     "jiti": "2.7.0",
     "typescript": "^5.9.3"
   }

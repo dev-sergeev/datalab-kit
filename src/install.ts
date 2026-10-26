@@ -6,7 +6,10 @@ import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
-export const gigaChatSource = 'npm:@dev-sergeev/pi-gigachat';
+const gigaChatPackageSource = 'npm:@dev-sergeev/pi-gigachat';
+const gigaChatVersion: string = createRequire(import.meta.url)('../package.json').dependencies['@dev-sergeev/pi-gigachat'];
+export const gigaChatSource = `${gigaChatPackageSource}@${gigaChatVersion}`;
+const previousGigaChatSource = `${gigaChatPackageSource}@0.6.4`;
 const execFileAsync = promisify(execFile);
 
 export function managedAgentDir(packageRoot: string): string | undefined {
@@ -17,7 +20,7 @@ export function managedAgentDir(packageRoot: string): string | undefined {
 
 export function isGigaChatSource(entry: unknown): boolean {
   const source = typeof entry === 'string' ? entry : entry && typeof entry === 'object' && 'source' in entry ? entry.source : undefined;
-  return typeof source === 'string' && (source === gigaChatSource || source.startsWith(`${gigaChatSource}@`));
+  return typeof source === 'string' && (source === gigaChatPackageSource || source.startsWith(`${gigaChatPackageSource}@`));
 }
 
 async function readSettings(agentDir: string): Promise<Record<string, unknown>> {
@@ -31,10 +34,22 @@ async function readSettings(agentDir: string): Promise<Record<string, unknown>> 
 
 export async function hasConfiguredGigaChat(agentDir: string): Promise<boolean> {
   const settings = await readSettings(agentDir);
-  return Array.isArray(settings.packages) && settings.packages.some(isGigaChatSource);
+  const existing = Array.isArray(settings.packages) ? settings.packages.find(isGigaChatSource) : undefined;
+  if (!existing) return false;
+  const source = typeof existing === 'string' ? existing : existing.source;
+  if (source !== previousGigaChatSource) return true;
+  if (typeof existing === 'object' && existing.extensions !== undefined) return true;
+  // Pi skips an old exact source when the managed copy is already newer.
+  try {
+    const installed = JSON.parse(await readFile(join(agentDir, 'npm/node_modules/@dev-sergeev/pi-gigachat/package.json'), 'utf8'));
+    return `${gigaChatPackageSource}@${installed.version}` === source;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
 }
 
-/** Preserve every user field and package filter; only add a missing source. */
+/** Preserve user fields and filters; migrate former kit sources to this release. */
 export async function registerGigaChat(agentDir: string): Promise<void> {
   await mkdir(agentDir, { recursive: true });
   const lock = join(agentDir, 'settings.json.lock');
@@ -44,8 +59,12 @@ export async function registerGigaChat(agentDir: string): Promise<void> {
     const settings = await readSettings(agentDir);
     if (settings.packages !== undefined && !Array.isArray(settings.packages)) throw new Error('Pi packages must be an array');
     const packages = (settings.packages ?? []) as unknown[];
-    if (packages.some(isGigaChatSource)) return;
-    settings.packages = [...packages, gigaChatSource];
+    const existing = packages.find(isGigaChatSource);
+    const source = typeof existing === 'string' ? existing : existing && typeof existing === 'object' && 'source' in existing ? existing.source : undefined;
+    if (existing && source !== gigaChatPackageSource && source !== previousGigaChatSource) return;
+    settings.packages = existing
+      ? packages.map(entry => entry !== existing ? entry : typeof entry === 'string' ? gigaChatSource : { ...entry as object, source: gigaChatSource })
+      : [...packages, gigaChatSource];
     await writeFile(temp, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     await rename(temp, join(agentDir, 'settings.json'));
   } finally {
@@ -61,20 +80,10 @@ export async function finishInstallation(packageRoot: string): Promise<void> {
   const settings = await readSettings(agentDir);
   const existing = Array.isArray(settings.packages) ? settings.packages.find(isGigaChatSource) : undefined;
   const source = typeof existing === 'string' ? existing : existing?.source;
-  // An explicitly selected user version remains authoritative.
-  if (typeof source === 'string' && source !== gigaChatSource) return;
+  // Preserve user versions except the known pin supplied by the previous kit.
+  if (typeof source === 'string' && source !== gigaChatPackageSource && source !== gigaChatSource && source !== previousGigaChatSource) return;
   await refreshGigaChat(agentDir);
   await registerGigaChat(agentDir);
-}
-
-export function gigaChatExtensionPath(packageRoot: string): string {
-  const agentDir = managedAgentDir(packageRoot);
-  if (agentDir) {
-    const managed = join(agentDir, 'npm/node_modules/@dev-sergeev/pi-gigachat/extension.js');
-    if (existsSync(managed)) return managed;
-  }
-  const require = createRequire(join(packageRoot, 'package.json'));
-  return join(dirname(require.resolve('@dev-sergeev/pi-gigachat/package.json')), 'extension.js');
 }
 
 async function npm(args: string[]): Promise<string> {
@@ -86,13 +95,10 @@ async function npm(args: string[]): Promise<string> {
 }
 
 async function refreshGigaChat(agentDir: string): Promise<void> {
-  const metadata: unknown = JSON.parse(await npm(['view', '@dev-sergeev/pi-gigachat@latest', 'version', '--json']));
-  const latest = Array.isArray(metadata) ? metadata.at(-1) : metadata;
-  if (typeof latest !== 'string' || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(latest)) throw new Error('Invalid GigaChat registry version');
   const destination = join(agentDir, 'npm/node_modules/@dev-sergeev/pi-gigachat');
   try {
     const installed = JSON.parse(await readFile(join(destination, 'package.json'), 'utf8'));
-    if (installed.version === latest) return;
+    if (installed.version === gigaChatVersion) return;
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
 
   // Stage independently: nested npm must not rewrite the outer install's lockfile.
@@ -101,7 +107,7 @@ async function refreshGigaChat(agentDir: string): Promise<void> {
   const replacement = join(stage, 'replacement');
   let moved = false;
   try {
-    await npm(['install', '--prefix', stage, `@dev-sergeev/pi-gigachat@${latest}`,
+    await npm(['install', '--prefix', stage, `@dev-sergeev/pi-gigachat@${gigaChatVersion}`,
       '--ignore-scripts', '--legacy-peer-deps', '--no-audit', '--no-fund']);
     await cp(join(stage, 'node_modules/@dev-sergeev/pi-gigachat'), replacement, { recursive: true });
     // Preserve the staged dependency tree so compiled ESM imports stay resolvable.

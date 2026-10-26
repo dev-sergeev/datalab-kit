@@ -1,17 +1,13 @@
 import { createProvider } from '@earendil-works/pi-ai';
 import type { Model } from '@earendil-works/pi-ai';
-import type { streamSimpleGigaChat as GigaChatStream } from '@dev-sergeev/pi-gigachat';
+import { streamSimpleGigaChat } from './gigachat-stream.js';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
-import { pathToFileURL } from 'node:url';
 
-export default async function registerDataLab(pi: ExtensionAPI, extensionPath: string): Promise<void> {
+export default async function registerDataLab(pi: ExtensionAPI): Promise<void> {
   const baseUrl = process.env.GIGACHAT_API_URL?.trim();
   const apiKey = process.env.JPY_API_TOKEN?.trim();
   if (!baseUrl || !apiKey) return;
 
-  // Pi may load an independently updated managed installation, not our dependency.
-  const { streamSimpleGigaChat } = await import(pathToFileURL(extensionPath).href) as
-    { streamSimpleGigaChat: typeof GigaChatStream };
   const models: Model<'gigachat-extension-api'>[] = [
     { id: 'glm-5.2', name: 'GLM 5.2', contextWindow: 200000, maxTokens: 64000 },
     { id: 'Qwen3.5-397b', name: 'Qwen 3.5 397B', contextWindow: 262144, maxTokens: 32768 },
