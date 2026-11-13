@@ -47,13 +47,12 @@ export async function registry(root) {
       versions.set(`${manifest.name}@${manifest.version}`, entry);
       latest.set(manifest.name, manifest.version);
     },
-    async addGiga(version) {
-      const dir = join(root, `giga-${version}`);
+    async addComponent(name, version = '1.0.0') {
+      const dir = join(root, `${name.replaceAll('/', '-').replace('@', '')}-${version}`);
       await mkdir(dir);
-      const manifest = { name: '@dev-sergeev/pi-gigachat', version, type: 'module',
-        exports: { './package.json': './package.json' }, pi: { extensions: ['./extension.js'] } };
+      const manifest = { name, version, type: 'module', pi: { extensions: ['./extension.js'] } };
       await writeFile(join(dir, 'package.json'), JSON.stringify(manifest));
-      await writeFile(join(dir, 'extension.js'), 'import { getAgentDir } from "@earendil-works/pi-coding-agent"; export default function(pi) { pi.registerCommand("fixture-giga", { description: getAgentDir(), handler: async () => {} }); }');
+      await writeFile(join(dir, 'extension.js'), `export default function(pi) { pi.registerCommand(${JSON.stringify(`fixture-${name.replaceAll(/[^a-z0-9]/g, '-')}`)}, { description: ${JSON.stringify(version)}, handler: async () => {} }); }`);
       const { stdout } = await run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', root], { cwd: dir });
       await this.add(manifest, join(root, packInfo(stdout).filename));
     },

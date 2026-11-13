@@ -1,6 +1,8 @@
 # ADR 0002: Доставка компонентов и значений по умолчанию
 
-Status: accepted
+Status: superseded by [ADR 0004](0004-independent-component-installer.md) in 0.2.1
+
+Ниже сохранена история доставки 0.1.x. Bundling, патчи, закрепления и runtime-восстановление источника не применяются к 0.2.1.
 
 ## Контекст
 
