@@ -1,6 +1,6 @@
 {
   "name": "@dev-sergeev/datalab-kit",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "A one-time installer of independent Pi coding agent packages",
   "type": "module",
   "license": "MIT",
@@ -14,7 +14,7 @@
   ],
   "publishConfig": {
     "access": "public",
-    "tag": "installer"
+    "tag": "latest"
   },
   "files": [
     "dist",
