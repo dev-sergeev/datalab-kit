@@ -9,7 +9,7 @@ const components = [
   '@dev-sergeev/pi-gigachat',
   '@juicesharp/rpiv-ask-user-question',
   'pi-powerline-footer',
-  '@gotgenes/pi-permission-system',
+  'permission-system',
   '@narumitw/pi-plan-mode',
   '@gotgenes/pi-subagents',
   '@capdiem/pi-todo',
@@ -53,16 +53,16 @@ test('one-time CLI installs twelve independent unversioned Pi packages', { timeo
     const manifest = JSON.parse(await readFile(join(f.agentDir, 'npm/node_modules', name, 'package.json'), 'utf8'));
     assert.equal(manifest.version, '1.0.0');
   }
-  await f.server.addComponent('pi-rewind', '1.1.0');
-  await f.pi('update', 'npm:pi-rewind');
-  const rewindPath = join(f.agentDir, 'npm/node_modules/pi-rewind/package.json');
-  assert.equal(JSON.parse(await readFile(rewindPath, 'utf8')).version, '1.1.0');
+  await f.server.addComponent('permission-system', '1.1.0');
+  await f.pi('update', 'npm:permission-system');
+  const permissionPath = join(f.agentDir, 'npm/node_modules/permission-system/package.json');
+  assert.equal(JSON.parse(await readFile(permissionPath, 'utf8')).version, '1.1.0');
   await f.pi('uninstall', 'npm:pi-toggle-skills');
-  await f.pi('install', 'npm:pi-rewind@1.0.0');
+  await f.pi('install', 'npm:permission-system@1.0.0');
   const chosen = await settings(f.agentDir);
   await f.install();
   assert.deepEqual(await settings(f.agentDir), chosen, 'completed bootstrap must not restore removals or replace a user pin');
-  assert.equal(JSON.parse(await readFile(rewindPath, 'utf8')).version, '1.0.0');
+  assert.equal(JSON.parse(await readFile(permissionPath, 'utf8')).version, '1.0.0');
   await f.server.close();
   await f.install();
   assert.deepEqual(await settings(f.agentDir), chosen, 'completed invocation must not need the registry');
@@ -107,6 +107,52 @@ test('partial failure resumes the original plan without restoring a completed th
   assert.deepEqual((await settings(f.agentDir)).packages, sources.slice(1));
   await f.install();
   assert.deepEqual((await settings(f.agentDir)).packages, sources.slice(1));
+});
+
+test('an incomplete 0.2.1 plan replaces the pending legacy permission source', { timeout: 300_000 }, async t => {
+  const f = await fixture(t);
+  await f.server.addComponent('permission-system');
+  await f.server.addComponent('pi-rewind');
+  const original = { packages: ['npm:user-package@1.2.3'], userSetting: true };
+  await writeFile(join(f.agentDir, 'settings.json'), JSON.stringify(original));
+  await writeFile(join(f.agentDir, '.datalab-kit-install.json'), JSON.stringify({
+    version: 1, pending: ['npm:@gotgenes/pi-permission-system', 'npm:pi-rewind'],
+    remove: [], complete: false, normalize: 'npm:@gotgenes/pi-permission-system',
+  }));
+  await f.install();
+  assert.deepEqual(await settings(f.agentDir), {
+    ...original, packages: [...original.packages, 'npm:permission-system', 'npm:pi-rewind'],
+  });
+  assert.equal(JSON.parse(await readFile(join(f.agentDir, 'npm/node_modules/permission-system/package.json'), 'utf8')).version, '1.0.0');
+  await assert.rejects(readFile(join(f.agentDir, 'npm/node_modules/@gotgenes/pi-permission-system/package.json')), { code: 'ENOENT' });
+  assert.deepEqual(JSON.parse(await readFile(join(f.agentDir, '.datalab-kit-install.json'), 'utf8')), {
+    version: 1, pending: [], remove: [], complete: true,
+  });
+});
+
+test('initial setup refuses legacy permission extensions in global or project settings', { timeout: 120_000 }, async t => {
+  for (const legacy of ['npm:@gotgenes/pi-permission-system', 'npm:@mzwing/pi-permission-auto-review']) {
+    for (const scope of ['global', 'local']) {
+      const f = await fixture(t);
+      const localDir = join(f.cwd, '.pi');
+      await mkdir(localDir);
+      const globalSettings = JSON.stringify({ packages: scope === 'global' ? [`${legacy}@1.0.0`] : [], userSetting: true, defaultProjectTrust: 'always' });
+      const localSettings = JSON.stringify({ packages: scope === 'local' ? [{ source: legacy, extensions: [], skills: [] }] : [], localSetting: true });
+      await writeFile(join(f.agentDir, 'settings.json'), globalSettings);
+      await writeFile(join(localDir, 'settings.json'), localSettings);
+      for (const args of [[], ['--local']]) {
+        await assert.rejects(f.install(...args), error => {
+          assert.ok(error.message.includes(`Cannot install npm:permission-system while ${legacy} is configured`));
+          return true;
+        });
+      }
+      assert.equal(await readFile(join(f.agentDir, 'settings.json'), 'utf8'), globalSettings);
+      assert.equal(await readFile(join(localDir, 'settings.json'), 'utf8'), localSettings);
+      await assert.rejects(readFile(join(f.agentDir, '.datalab-kit-install.json')), { code: 'ENOENT' });
+      await assert.rejects(readFile(join(localDir, '.datalab-kit-install.json')), { code: 'ENOENT' });
+      await assert.rejects(readFile(join(f.agentDir, 'npm/node_modules/permission-system/package.json')), { code: 'ENOENT' });
+    }
+  }
 });
 
 test('global and local bootstrap plans are isolated and local installation respects Pi trust', { timeout: 600_000 }, async t => {
@@ -178,10 +224,13 @@ test('the one-time CLI requires an existing Pi and a completed plan never adds c
   const f = await fixture(t);
   await assert.rejects(run(process.execPath, [installer], { ...f.options, env: { ...f.env, PATH: '' } }), /Pi must already be installed/);
   await assert.rejects(readFile(join(f.agentDir, '.datalab-kit-install.json')), { code: 'ENOENT' });
-  await writeFile(join(f.agentDir, 'settings.json'), JSON.stringify({ userSetting: true }));
-  await writeFile(join(f.agentDir, '.datalab-kit-install.json'), JSON.stringify({ version: 1, pending: [], remove: [], complete: true }));
+  const original = { userSetting: true, packages: ['npm:@gotgenes/pi-permission-system@1.0.0'] };
+  const marker = JSON.stringify({ version: 1, pending: [], remove: [], complete: true });
+  await writeFile(join(f.agentDir, 'settings.json'), JSON.stringify(original));
+  await writeFile(join(f.agentDir, '.datalab-kit-install.json'), marker);
   await f.install();
-  assert.deepEqual(await settings(f.agentDir), { userSetting: true }, 'later kit compositions must not expand a completed plan');
+  assert.deepEqual(await settings(f.agentDir), original, 'later kit compositions must not expand a completed plan');
+  assert.equal(await readFile(join(f.agentDir, '.datalab-kit-install.json'), 'utf8'), marker);
 });
 
 test('initial bootstrap installs latest when an unregistered older npm dependency remains', { timeout: 300_000 }, async t => {

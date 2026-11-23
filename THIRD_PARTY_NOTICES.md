@@ -1,6 +1,6 @@
 # Third-party notices
 
-Datalab Kit 0.2.1 does not bundle third-party component code, runtime dependencies, or adapted skills. It invokes the installed Pi CLI to install independent packages; each package and its dependencies retain their own licenses and notices. Consult the installed version and its upstream repository for applicable terms; this list does not assert license values.
+Datalab Kit 0.2.2 does not bundle third-party component code, runtime dependencies, or adapted skills. It invokes the installed Pi CLI to install independent packages; each package and its dependencies retain their own licenses and notices. Consult the installed version and its upstream repository for applicable terms; this list does not assert license values.
 
 ## Independent components
 
@@ -9,7 +9,7 @@ Datalab Kit 0.2.1 does not bundle third-party component code, runtime dependenci
 | `@dev-sergeev/pi-gigachat` | https://github.com/dev-sergeev/pi-gigachat |
 | `@juicesharp/rpiv-ask-user-question` | https://github.com/juicesharp/rpiv-mono |
 | `pi-powerline-footer` | https://github.com/nicobailon/pi-powerline-footer |
-| `@gotgenes/pi-permission-system` | https://github.com/gotgenes/pi-packages |
+| `permission-system` | https://www.npmjs.com/package/permission-system |
 | `@narumitw/pi-plan-mode` | https://github.com/narumiruna/pi-extensions |
 | `@gotgenes/pi-subagents` | https://github.com/gotgenes/pi-packages |
 | `@capdiem/pi-todo` | https://github.com/capdiem/pi-extensions |
@@ -21,4 +21,4 @@ Datalab Kit 0.2.1 does not bundle third-party component code, runtime dependenci
 
 Pi is installed separately: https://github.com/earendil-works/pi.
 
-The bundled components, GigaChat adapter and adapted Anthropic skill-creator described in earlier releases are no longer distributed by Kit 0.2.1. Their historical notices apply to those earlier artifacts, not to new installer code.
+The bundled components, GigaChat adapter and adapted Anthropic skill-creator described in earlier releases are no longer distributed by Kit 0.2.2. Their historical notices apply to those earlier artifacts, not to new installer code.

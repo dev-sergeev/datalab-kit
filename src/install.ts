@@ -5,11 +5,16 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const kit = '@dev-sergeev/datalab-kit';
+const permissionName = 'permission-system';
+const permissionSource = `npm:${permissionName}`;
+const legacyPermissionName = '@gotgenes/pi-permission-system';
+const legacyPermissionSource = `npm:${legacyPermissionName}`;
+const legacyPermissionNames = [legacyPermissionName, '@mzwing/pi-permission-auto-review'];
 const components = [
   '@dev-sergeev/pi-gigachat',
   '@juicesharp/rpiv-ask-user-question',
   'pi-powerline-footer',
-  '@gotgenes/pi-permission-system',
+  permissionName,
   '@narumitw/pi-plan-mode',
   '@gotgenes/pi-subagents',
   '@capdiem/pi-todo',
@@ -91,8 +96,8 @@ async function packageName(source: string, dir: string): Promise<string | undefi
 
 function validatePlan(value: unknown): asserts value is Plan {
   if (!object(value) || value.version !== 1 || typeof value.complete !== 'boolean' ||
-      !Array.isArray(value.pending) || value.pending.some(source => !components.includes(source)) ||
-      new Set(value.pending).size !== value.pending.length ||
+      !Array.isArray(value.pending) || value.pending.some(source => source !== legacyPermissionSource && !components.includes(source)) ||
+      new Set(value.pending.map(source => source === legacyPermissionSource ? permissionSource : source)).size !== value.pending.length ||
       !Array.isArray(value.remove) || value.remove.some(source => typeof source !== 'string' || !source.trim() || source.includes('\0') ||
         (source.startsWith('npm:') && npmName(source) !== kit)) ||
       new Set(value.remove).size !== value.remove.length ||
@@ -117,13 +122,17 @@ export async function install(args: string[]): Promise<void> {
   }
   const local = args.includes('--local');
   const agentDir = pathFrom(process.env.PI_CODING_AGENT_DIR || join(homedir(), '.pi', 'agent'));
-  const dir = local ? join(process.cwd(), '.pi') : agentDir;
+  const projectDir = join(process.cwd(), '.pi');
+  const dir = local ? projectDir : agentDir;
   const marker = join(dir, '.datalab-kit-install.json');
   const saved = await json(marker);
   if (saved !== undefined) validatePlan(saved);
   await packages(agentDir);
-  await packages(join(process.cwd(), '.pi'));
+  await packages(projectDir);
   if (saved?.complete) return;
+  if (Number.parseInt(process.versions.node, 10) < 24) {
+    throw new Error('Datalab Kit requires Node.js 24 or later to install permission-system.');
+  }
   pi(['--version']);
   await mkdir(dir, { recursive: true });
   const lock = `${marker}.lock`;
@@ -143,12 +152,23 @@ export async function install(args: string[]): Promise<void> {
     if (current?.complete) return;
     const entries = await packages(dir);
     const names = await Promise.all(entries.map(entry => packageName(sourceOf(entry), dir)));
+    const otherDir = local ? agentDir : projectDir;
+    const otherNames = await Promise.all((await packages(otherDir)).map(entry => packageName(sourceOf(entry), otherDir)));
+    const legacy = legacyPermissionNames.find(name => names.includes(name) || otherNames.includes(name));
+    if (legacy) {
+      throw new Error(`Cannot install ${permissionSource} while npm:${legacy} is configured. Remove the old extension in its Pi scope before retrying; keep its settings files.`);
+    }
     const plan: Plan = current ?? {
       version: 1,
       pending: components.filter(source => !names.includes(npmName(source))),
       remove: entries.filter((_, index) => names[index] === kit).map(sourceOf),
       complete: false,
     };
+    const legacyIndex = plan.pending.indexOf(legacyPermissionSource);
+    if (legacyIndex !== -1) {
+      plan.pending[legacyIndex] = permissionSource;
+      if (plan.normalize === legacyPermissionSource) delete plan.normalize;
+    }
     for (const source of plan.remove) {
       if (entries.some(entry => sourceOf(entry) === source) && await packageName(source, dir) !== kit) {
         throw new Error(`Installation marker contains a non-kit removal: ${source}`);
