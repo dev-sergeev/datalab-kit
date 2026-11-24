@@ -19,7 +19,7 @@
   "files": [
     "dist",
     "scripts/install.mjs",
-    "docs/adr",
+    "docs/adr/0004-independent-component-installer.md",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
